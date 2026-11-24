@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en-us">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <link rel="icon" href="favicon.ico">
+    <link rel="stylesheet" href="25010801/theme/game.css">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Escape Road City</title>
+    <meta name="description" content="Escape Road City is a thrilling car chase game on the streets! Control your car, overcome all obstacles and escape from the police chase." />
+    <style type="text/css">
+        .jss1:before {
+            top: 0;
+            width: 100%;
+            filter: blur(16px);
+            height: 100%;
+            content: "";
+            display: block;
+            opacity: .5;
+            z-index: 0;
+            position: absolute;
+            background-size: cover;
+            background-image: url("25010801/loading.png")
+        }
+    </style>
+
+    <script>
+        // The Unity player ships with its own copy of the publisher SDK.
+        // Redirect anything it tries to fetch from the internet to files that
+        // live next to the game, so the build never needs a network connection.
+        (function () {
+            'use strict';
+            var routes = [
+                ['/api/infov2', '25010801/offline/infov2.json'],
+                ['/ajax/gameinfo', '25010801/offline/gameinfo.txt'],
+                ['/lib/infourl.js', '25010801/offline/infourl.txt'],
+                ['/apiaz/event', '25010801/offline/event.json']
+            ];
+
+            function localURL(value) {
+                try {
+                    if (typeof value !== 'string') return value;
+                    if (/^(blob:|data:|about:|javascript:)/i.test(value)) return value;
+                    var url = new URL(value, location.href);
+                    if (url.origin === location.origin) return value;
+                    var path = url.pathname;
+                    if (path.indexOf('/data/image/') !== -1) {
+                        return '25010801/images/' + path.split('/').pop();
+                    }
+                    for (var i = 0; i < routes.length; i++) {
+                        if (path.indexOf(routes[i][0]) !== -1) return routes[i][1];
+                    }
+                    return '25010801/offline/stub.json';
+                } catch (e) {
+                    return value;
+                }
+            }
+
+            var realOpen = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function (method, url, async, user, pass) {
+                return realOpen.call(this, method, localURL(url), async, user, pass);
+            };
+
+            var realFetch = window.fetch;
+            if (realFetch) {
+                window.fetch = function (input, init) {
+                    if (typeof input === 'string') return realFetch.call(this, localURL(input), init);
+                    if (input && typeof input.url === 'string') {
+                        var target = localURL(input.url);
+                        if (target !== input.url) return realFetch.call(this, target, init);
+                    }
+                    return realFetch.call(this, input, init);
+                };
+            }
+
+            function patchSrc(proto) {
+                if (!proto) return;
+                var desc = Object.getOwnPropertyDescriptor(proto, 'src');
+                if (!desc || !desc.set) return;
+                Object.defineProperty(proto, 'src', {
+                    get: desc.get,
+                    set: function (value) { desc.set.call(this, localURL(value)); },
+                    configurable: true,
+                    enumerable: desc.enumerable
+                });
+            }
+            patchSrc(window.HTMLScriptElement && HTMLScriptElement.prototype);
+            patchSrc(window.HTMLImageElement && HTMLImageElement.prototype);
+            patchSrc(window.HTMLLinkElement && HTMLLinkElement.prototype);
+        })();
+    </script>
+
+    <script>
+        // Fully local Unity WebGL build. No remote hosts, no telemetry.
+        var buildUrl = "25010801/Build";
+        var config = {
+            dataUrl: buildUrl + "/escape-road-city-v25010801.data.unityweb",
+            frameworkUrl: buildUrl + "/escape-road-city-v25010801.framework.js.unityweb",
+            codeUrl: buildUrl + "/escape-road-city-v25010801.wasm.unityweb",
+            streamingAssetsUrl: "25010801/StreamingAssets",
+            companyName: "azgames.io",
+            productName: "Escape Road City",
+            productVersion: "25010801",
+            pubId: ""
+        };
+        config.gameId = "escape-road-city";
+        config.eventLog = false;   // disables event.azgame.io reporting
+        config.buildAPI = "";      // no remote event endpoint
+
+        // Firebase is referenced by optional Unity plugins; define the config
+        // object locally so those code paths stay harmless without the SDK.
+        window.firebaseConfig = {
+            apiKey: "local",
+            authDomain: "localhost",
+            projectId: "offline",
+            storageBucket: "offline",
+            messagingSenderId: "0",
+            appId: "local",
+            measurementId: "local"
+        };
+    </script>
+    <script src="25010801/lib/gmsoft-offline.js"></script>
+    <script src="25010801/lib/firebase-offline.js"></script>
+</head>
+
+<body>
+    <div id="unity-container" style="display: none;">
+        <canvas id="unity-canvas"></canvas>
+    </div>
+    <div id="loadingBlock" style="">
+        <div class="jss31 jss34 jss1">
+            <div style="position: absolute; font-family: Arial, Helvetica, sans-serif;	bottom: 10px; right: 10px; font-size: 18px; color: #ffffff; opacity: 0.5;">25010801</div>
+            <div class="spinner"></div>
+            <div class="jss31 jss34 jss48" style="flex: 1 1 0%;">
+                <div class="jss32">
+                    <div class="jss7 jss9 jss20 jss3">
+                        <div class="jss125">
+                            <div class="jss123">
+                                <img src="25010801/logo.png">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!--PRODUCT_VERSION:25010801END-->
+            <div class="jss31 jss34" style="flex: 3 1 0%;">
+                <div class="jss32">
+                    <div class="jss31 jss34 jss39 jss50 gameloader">
+                        <div class="jss32">
+                            <div class="gameloader-game-name">Escape Road City</div>
+                        </div>
+                        <div class="jss32">
+                            <div class="jss32 gameloader-logo">
+                                <img id="game-logo" src="25010801/loading.png">
+                            </div>
+                        </div>
+                        <div class="jss32">
+                            <div>
+                                <div class="gameloader-progressbar">
+                                    <div class="gameloader-progressbar-progress" id="progress_fill" style="width: 0%;"></div>
+                                </div>
+                                <div class="gameloader-progress-info">Game Loading...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        var progressElement = document.getElementById('progress_fill');
+        var container = document.getElementById("unity-container");
+        var canvas = document.getElementById("unity-canvas");
+        var loadingBar = document.querySelector("#loadingBlock");
+        var progress_text = document.querySelector(".gameloader-progress-info");
+        let text_percent = "";
+        var script = document.createElement("script");
+        script.src = buildUrl + "/escape-road-city-v25010801.loader.js";
+        script.onload = () => {
+            createUnityInstance(canvas, config, (progress) => {
+                progressElement.style.width = 100 * progress + "%";
+                text_percent = "Loading game: " + Math.round(progress * 100) + "%";
+                progress_text.innerText = progress >= 0.99 ? "Starting game..." : text_percent;
+            }).then((unityInstance) => {
+                window.unityInstance = unityInstance;
+                setTimeout(function() {
+                    loadingBar.style.display = "none";
+                    window.focus();
+                }, 500);
+                container.style.display = "block";
+            }).catch((message) => {
+                progress_text.innerText = "Could not load the game: " + message;
+                console.error(message);
+            });
+        };
+        script.onerror = () => {
+            progress_text.innerText = "Could not load the Unity loader.";
+        };
+        document.body.appendChild(script);
+    </script>
+</body>
+
+</html>

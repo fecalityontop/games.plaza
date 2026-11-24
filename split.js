@@ -1,38 +1,89 @@
 const fs = require('fs');
 const path = require('path');
+const { createReadStream, createWriteStream } = fs;
+const { pipeline } = require('stream/promises');
+const { stat, writeFile, access } = fs.promises;
 
-function splitFile(filePath, numParts) {
-  if (!fs.existsSync(filePath)) {
+const MB = 1024 * 1024;
+
+function pad(n) { return String(n).padStart(3, '0'); }
+
+// Streams a file into fixed-size parts so even the 7.8 GB disc image works
+// without loading it all into memory. Every part is < the 25 MiB asset limit.
+async function splitFile(filePath, numParts, { manifest = false } = {}) {
+  try {
+    await access(filePath);
+  } catch {
     console.error(`File not found: ${filePath}`);
     process.exit(1);
   }
 
-  const buffer = fs.readFileSync(filePath);
-  const chunkSize = Math.ceil(buffer.length / numParts);
+  const size = (await stat(filePath)).size;
+  const chunkSize = Math.ceil(size / numParts);
 
-  console.log(`✅ Successfully split "${path.basename(filePath)}" into ${numParts} parts:`);
-
+  // Track the remaining bytes explicitly: ceil() can make numParts*chunkSize
+  // slightly larger than the file, so the final part must be shortened.
+  const sizes = [];
+  let remaining = size;
   for (let i = 0; i < numParts; i++) {
-    const start = i * chunkSize;
-    const end = Math.min(start + chunkSize, buffer.length);
-    const partBuffer = buffer.subarray(start, end);
-
-    // Creates zero-padded extensions like .part001, .part002, etc.
-    const partNumStr = String(i + 1).padStart(3, '0');
-    const partFilename = `${filePath}.part${partNumStr}`;
-
-    fs.writeFileSync(partFilename, partBuffer);
-    console.log(` - ${partFilename} (${(partBuffer.length / 1024 / 1024).toFixed(2)} MB)`);
+    const n = Math.min(chunkSize, remaining);
+    sizes.push(n);
+    remaining -= n;
   }
+
+  let start = 0;
+  for (let i = 0; i < numParts; i++) {
+    const end = start + sizes[i] - 1;
+    const partName = `${filePath}.part${pad(i + 1)}`;
+    await pipeline(
+      createReadStream(filePath, { start, end, highWaterMark: 4 * MB }),
+      createWriteStream(partName)
+    );
+    start += sizes[i];
+    if ((i + 1) % 25 === 0 || i + 1 === numParts) {
+      console.log(` - part ${i + 1}/${numParts} (${(sizes[i] / MB).toFixed(2)} MB)`);
+    }
+  }
+
+  if (manifest) {
+    const manifestName = `${filePath}.manifest.json`;
+    await writeFile(manifestName, JSON.stringify({
+      file: path.basename(filePath),
+      total: size,
+      partCount: numParts,
+      chunkSize,
+      sizes,
+    }));
+    console.log(` manifest: ${manifestName}`);
+  }
+
+  console.log(`✅ Split "${path.basename(filePath)}" into ${numParts} parts (~${(chunkSize / MB).toFixed(2)} MB each)`);
 }
 
-// Usage: node split.js john.mp3 3  (or just node split.js john.mp3 for 2 parts)
-const targetFile = process.argv[2];
-const numParts = parseInt(process.argv[3], 10) || 2;
+async function main() {
+  const targetFile = process.argv[2];
+  if (!targetFile) {
+    console.error('Usage: node split.js <file> <numParts> [--manifest]');
+    console.error('   or: node split.js <file> --chunk 24   (24 MiB parts + manifest)');
+    process.exit(1);
+  }
 
-if (!targetFile) {
-  console.error("Please specify a file to split. Example: node split.js john.mp3 3");
-  process.exit(1);
+  if (process.argv[3] === '--chunk') {
+    const mb = Number(process.argv[4]);
+    if (!Number.isFinite(mb) || mb <= 0) {
+      console.error('Chunk size must be a positive number of MiB, e.g. --chunk 24');
+      process.exit(1);
+    }
+    const size = (await stat(targetFile)).size;
+    await splitFile(targetFile, Math.max(1, Math.ceil(size / (mb * MB))), { manifest: true });
+    return;
+  }
+
+  const numParts = parseInt(process.argv[3], 10) || 2;
+  await splitFile(targetFile, numParts, { manifest: process.argv.includes('--manifest') });
 }
 
-splitFile(targetFile, numParts);
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

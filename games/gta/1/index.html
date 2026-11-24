@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>Grand Theft Auto</title>
+    <style>
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+}
+#game-frame {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+canvas.emscripten {
+  display: block;
+  border: 0;
+  background: #000;
+  image-rendering: pixelated;
+  outline: none;
+}
+canvas.emscripten:focus {
+  outline: none;
+}
+#spinner, #status, #progress, #output {
+  display: none !important;
+}
+</style>
+  </head>
+  <body>
+  <div id="game-frame">
+    <canvas class="emscripten" id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+  </div>
+  <div id="spinner" hidden></div>
+  <div id="status" hidden></div>
+  <progress id="progress" hidden></progress>
+  <textarea id="output" hidden></textarea>
+
+    <script type='text/javascript'>
+      var statusElement = document.getElementById('status');
+      var progressElement = document.getElementById('progress');
+      var spinnerElement = document.getElementById('spinner');
+
+      var Module = {
+        print: (function() {
+          var element = document.getElementById('output');
+          if (element) element.value = ''; // clear browser cache
+          return (...args) => {
+            var text = args.join(' ');
+            // These replacements are necessary if you render to raw HTML
+            //text = text.replace(/&/g, "&amp;");
+            //text = text.replace(/</g, "&lt;");
+            //text = text.replace(/>/g, "&gt;");
+            //text = text.replace('\n', '<br>', 'g');
+            console.log(text);
+            if (element) {
+              element.value += text + "\n";
+              element.scrollTop = element.scrollHeight; // focus on bottom
+            }
+          };
+        })(),
+        canvas: (() => {
+          var canvas = document.getElementById('canvas');
+
+          // As a default initial behavior, pop up an alert when webgl context is lost. To make your
+          // application robust, you may want to override this behavior before shipping!
+          // See http://www.khronos.org/registry/webgl/specs/latest/1.0/#5.15.2
+          canvas.addEventListener("webglcontextlost", (e) => { alert('WebGL context lost. You will need to reload the page.'); e.preventDefault(); }, false);
+
+          return canvas;
+        })(),
+        setStatus: (text) => {
+          Module.setStatus.last ??= { time: Date.now(), text: '' };
+          if (text === Module.setStatus.last.text) return;
+          var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
+          var now = Date.now();
+          if (m && now - Module.setStatus.last.time < 30) return; // if this is a progress update, skip it if too soon
+          Module.setStatus.last.time = now;
+          Module.setStatus.last.text = text;
+          if (m) {
+            text = m[1];
+            progressElement.value = parseInt(m[2])*100;
+            progressElement.max = parseInt(m[4])*100;
+            progressElement.hidden = false;
+            spinnerElement.hidden = false;
+          } else {
+            progressElement.value = null;
+            progressElement.max = null;
+            progressElement.hidden = true;
+            if (!text) spinnerElement.style.display = 'none';
+          }
+          statusElement.innerHTML = text;
+        },
+        totalDependencies: 0,
+        monitorRunDependencies: (left) => {
+          this.totalDependencies = Math.max(this.totalDependencies, left);
+          Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
+        }
+      };
+      Module.setStatus('Downloading...');
+      window.onerror = (event) => {
+        // TODO: do not warn on ok events like simulating an infinite loop or exitStatus
+        Module.setStatus('Exception thrown, see JavaScript console');
+        spinnerElement.style.display = 'none';
+        Module.setStatus = (text) => {
+          if (text) console.error('[post-exception status] ' + text);
+        };
+      };
+    </script>
+<script type="text/javascript">
+  var Module = typeof Module != 'undefined' ? Module : {};
+
+  if (!Module['expectedDataFileDownloads']) {
+    Module['expectedDataFileDownloads'] = 0;
+  }
+
+  Module['expectedDataFileDownloads']++;
+  (() => {
+    // Do not attempt to redownload the virtual filesystem data when in a pthread or a Wasm Worker context.
+    var isPthread = typeof ENVIRONMENT_IS_PTHREAD != 'undefined' && ENVIRONMENT_IS_PTHREAD;
+    var isWasmWorker = typeof ENVIRONMENT_IS_WASM_WORKER != 'undefined' && ENVIRONMENT_IS_WASM_WORKER;
+    if (isPthread || isWasmWorker) return;
+    function loadPackage(metadata) {
+
+      var PACKAGE_PATH = '';
+      if (typeof window === 'object') {
+        PACKAGE_PATH = window['encodeURIComponent'](window.location.pathname.toString().substring(0, window.location.pathname.toString().lastIndexOf('/')) + '/');
+      } else if (typeof process === 'undefined' && typeof location !== 'undefined') {
+        // web worker
+        PACKAGE_PATH = encodeURIComponent(location.pathname.toString().substring(0, location.pathname.toString().lastIndexOf('/')) + '/');
+      }
+      var PACKAGE_NAME = 'gta1.data';
+      var REMOTE_PACKAGE_BASE = 'gta1.data';
+      if (typeof Module['locateFilePackage'] === 'function' && !Module['locateFile']) {
+        Module['locateFile'] = Module['locateFilePackage'];
+        err('warning: you defined Module.locateFilePackage, that has been renamed to Module.locateFile (using your locateFilePackage for now)');
+      }
+      var REMOTE_PACKAGE_NAME = Module['locateFile'] ? Module['locateFile'](REMOTE_PACKAGE_BASE, '') : REMOTE_PACKAGE_BASE;
+var REMOTE_PACKAGE_SIZE = metadata['remote_package_size'];
+
+      function fetchRemotePackage(packageName, packageSize, callback, errback) {
+        if (typeof process === 'object' && typeof process.versions === 'object' && typeof process.versions.node === 'string') {
+          require('fs').readFile(packageName, (err, contents) => {
+            if (err) {
+              errback(err);
+            } else {
+              callback(contents.buffer);
+            }
+          });
+          return;
+        }
+        Module['dataFileDownloads'] ??= {};
+        fetch(packageName)
+          .catch((cause) => Promise.reject(new Error(`Network Error: ${packageName}`, {cause}))) // If fetch fails, rewrite the error to include the failing URL & the cause.
+          .then((response) => {
+            if (!response.ok) {
+              return Promise.reject(new Error(`${response.status}: ${response.url}`));
+            }
+
+            if (!response.body && response.arrayBuffer) { // If we're using the polyfill, readers won't be available...
+              return response.arrayBuffer().then(callback);
+            }
+
+            const reader = response.body.getReader();
+            const iterate = () => reader.read().then(handleChunk).catch((cause) => {
+              return Promise.reject(new Error(`Unexpected error while handling : ${response.url} ${cause}`, {cause}));
+            });
+
+            const chunks = [];
+            const headers = response.headers;
+            const total = Number(headers.get('Content-Length') ?? packageSize);
+            let loaded = 0;
+
+            const handleChunk = ({done, value}) => {
+              if (!done) {
+                chunks.push(value);
+                loaded += value.length;
+                Module['dataFileDownloads'][packageName] = {loaded, total};
+
+                let totalLoaded = 0;
+                let totalSize = 0;
+
+                for (const download of Object.values(Module['dataFileDownloads'])) {
+                  totalLoaded += download.loaded;
+                  totalSize += download.total;
+                }
+
+                Module['setStatus']?.(`Downloading data... (${totalLoaded}/${totalSize})`);
+                return iterate();
+              } else {
+                const packageData = new Uint8Array(chunks.map((c) => c.length).reduce((a, b) => a + b, 0));
+                let offset = 0;
+                for (const chunk of chunks) {
+                  packageData.set(chunk, offset);
+                  offset += chunk.length;
+                }
+                callback(packageData.buffer);
+              }
+            };
+
+            Module['setStatus']?.('Downloading data...');
+            return iterate();
+          });
+      };
+
+      function handleError(error) {
+        console.error('package error:', error);
+      };
+
+      var fetchedCallback = null;
+      var fetched = Module['getPreloadedPackage'] ? Module['getPreloadedPackage'](REMOTE_PACKAGE_NAME, REMOTE_PACKAGE_SIZE) : null;
+
+      if (!fetched) fetchRemotePackage(REMOTE_PACKAGE_NAME, REMOTE_PACKAGE_SIZE, (data) => {
+        if (fetchedCallback) {
+          fetchedCallback(data);
+          fetchedCallback = null;
+        } else {
+          fetched = data;
+        }
+      }, handleError);
+
+    function runWithFS(Module) {
+
+      function assert(check, msg) {
+        if (!check) throw msg + new Error().stack;
+      }
+Module['FS_createPath']("/", "gtadata", true, true);
+Module['FS_createPath']("/gtadata", "audio", true, true);
+Module['FS_createPath']("/", "gtados", true, true);
+Module['FS_createPath']("/gtados", "data", true, true);
+Module['FS_createPath']("/", "gtawin", true, true);
+
+      /** @constructor */
+      function DataRequest(start, end, audio) {
+        this.start = start;
+        this.end = end;
+        this.audio = audio;
+      }
+      DataRequest.prototype = {
+        requests: {},
+        open: function(mode, name) {
+          this.name = name;
+          this.requests[name] = this;
+          Module['addRunDependency'](`fp ${this.name}`);
+        },
+        send: function() {},
+        onload: function() {
+          var byteArray = this.byteArray.subarray(this.start, this.end);
+          this.finish(byteArray);
+        },
+        finish: function(byteArray) {
+          var that = this;
+          // canOwn this data in the filesystem, it is a slide into the heap that will never change
+          Module['FS_createDataFile'](this.name, null, byteArray, true, true, true);
+          Module['removeRunDependency'](`fp ${that.name}`);
+          this.requests[this.name] = null;
+        }
+      };
+
+      var files = metadata['files'];
+      for (var i = 0; i < files.length; ++i) {
+        new DataRequest(files[i]['start'], files[i]['end'], files[i]['audio'] || 0).open('GET', files[i]['filename']);
+      }
+
+      function processPackageData(arrayBuffer) {
+        assert(arrayBuffer, 'Loading data file failed.');
+        assert(arrayBuffer.constructor.name === ArrayBuffer.name, 'bad input to processPackageData');
+        var byteArray = new Uint8Array(arrayBuffer);
+        var curr;
+        // Reuse the bytearray from the XHR as the source for file reads.
+          DataRequest.prototype.byteArray = byteArray;
+          var files = metadata['files'];
+          for (var i = 0; i < files.length; ++i) {
+            DataRequest.prototype.requests[files[i].filename].onload();
+          }          Module['removeRunDependency']('datafile_gta1.data');
+
+      };
+      Module['addRunDependency']('datafile_gta1.data');
+
+      if (!Module['preloadResults']) Module['preloadResults'] = {};
+
+      Module['preloadResults'][PACKAGE_NAME] = {fromCache: false};
+      if (fetched) {
+        processPackageData(fetched);
+        fetched = null;
+      } else {
+        fetchedCallback = processPackageData;
+      }
+
+    }
+    if (Module['calledRun']) {
+      runWithFS(Module);
+    } else {
+      if (!Module['preRun']) Module['preRun'] = [];
+      Module["preRun"].push(runWithFS); // FS is not initialized yet, wait for it
+    }
+
+    }
+    loadPackage({"files": [{"filename": "/freadme.doc", "start": 0, "end": 5682}, {"filename": "/freadme.txt", "start": 5682, "end": 8915}, {"filename": "/greadme.doc", "start": 8915, "end": 14740}, {"filename": "/greadme.txt", "start": 14740, "end": 17693}, {"filename": "/gta-auto.bat", "start": 17693, "end": 17727}, {"filename": "/gta.reg", "start": 17727, "end": 18331}, {"filename": "/gtadata/1.rep", "start": 18331, "end": 20355}, {"filename": "/gtadata/102.rep", "start": 20355, "end": 22107}, {"filename": "/gtadata/202.rep", "start": 22107, "end": 23803}, {"filename": "/gtadata/audio/0.wav", "start": 23803, "end": 1598365, "audio": 1}, {"filename": "/gtadata/audio/1.wav", "start": 1598365, "end": 2654887, "audio": 1}, {"filename": "/gtadata/audio/2.wav", "start": 2654887, "end": 4118045, "audio": 1}, {"filename": "/gtadata/audio/3.wav", "start": 4118045, "end": 5621399, "audio": 1}, {"filename": "/gtadata/audio/4.wav", "start": 5621399, "end": 6887085, "audio": 1}, {"filename": "/gtadata/audio/5.wav", "start": 6887085, "end": 8352491, "audio": 1}, {"filename": "/gtadata/audio/level000.raw", "start": 8352491, "end": 9397015}, {"filename": "/gtadata/audio/level000.sdt", "start": 9397015, "end": 9397207}, {"filename": "/gtadata/audio/level001.raw", "start": 9397207, "end": 10441584}, {"filename": "/gtadata/audio/level001.sdt", "start": 10441584, "end": 10443156}, {"filename": "/gtadata/audio/level002.raw", "start": 10443156, "end": 11470426}, {"filename": "/gtadata/audio/level002.sdt", "start": 11470426, "end": 11471998}, {"filename": "/gtadata/audio/level003.raw", "start": 11471998, "end": 12509450}, {"filename": "/gtadata/audio/level003.sdt", "start": 12509450, "end": 12511022}, {"filename": "/gtadata/audio/misbrief.raw", "start": 12511022, "end": 12653330}, {"filename": "/gtadata/audio/misbrief.sdt", "start": 12653330, "end": 12653450}, {"filename": "/gtadata/audio/vocalcom.raw", "start": 12653450, "end": 13959904}, {"filename": "/gtadata/audio/vocalcom.sdt", "start": 13959904, "end": 13960756}, {"filename": "/gtadata/big1.fon", "start": 13960756, "end": 14017574}, {"filename": "/gtadata/big2.fon", "start": 14017574, "end": 14214004}, {"filename": "/gtadata/c_alley0.fon", "start": 14214004, "end": 14329469}, {"filename": "/gtadata/cut0.act", "start": 14329469, "end": 14330237}, {"filename": "/gtadata/cut0.rat", "start": 14330237, "end": 14637437}, {"filename": "/gtadata/cut0.raw", "start": 14637437, "end": 15559037}, {"filename": "/gtadata/cut00.fon", "start": 15559037, "end": 15690887}, {"filename": "/gtadata/cut00t.fon", "start": 15690887, "end": 15822737}, {"filename": "/gtadata/cut01.fon", "start": 15822737, "end": 15856279}, {"filename": "/gtadata/cut01t.fon", "start": 15856279, "end": 15889821}, {"filename": "/gtadata/cut1.act", "start": 15889821, "end": 15890589}, {"filename": "/gtadata/cut1.rat", "start": 15890589, "end": 16197789}, {"filename": "/gtadata/cut1.raw", "start": 16197789, "end": 17119389}, {"filename": "/gtadata/cut10.fon", "start": 17119389, "end": 17152935}, {"filename": "/gtadata/cut10t.fon", "start": 17152935, "end": 17186481}, {"filename": "/gtadata/cut11.fon", "start": 17186481, "end": 17220023}, {"filename": "/gtadata/cut11t.fon", "start": 17220023, "end": 17253565}, {"filename": "/gtadata/cut12.fon", "start": 17253565, "end": 17262529}, {"filename": "/gtadata/cut12t.fon", "start": 17262529, "end": 17271493}, {"filename": "/gtadata/cut13.fon", "start": 17271493, "end": 17296845}, {"filename": "/gtadata/cut13t.fon", "start": 17296845, "end": 17322197}, {"filename": "/gtadata/cut2.act", "start": 17322197, "end": 17322965}, {"filename": "/gtadata/cut2.rat", "start": 17322965, "end": 17630165}, {"filename": "/gtadata/cut2.raw", "start": 17630165, "end": 18551765}, {"filename": "/gtadata/cut20.fon", "start": 18551765, "end": 18585311}, {"filename": "/gtadata/cut20t.fon", "start": 18585311, "end": 18618857}, {"filename": "/gtadata/cut21.fon", "start": 18618857, "end": 18625774}, {"filename": "/gtadata/cut21t.fon", "start": 18625774, "end": 18632691}, {"filename": "/gtadata/cut22.fon", "start": 18632691, "end": 18666233}, {"filename": "/gtadata/cut22t.fon", "start": 18666233, "end": 18699775}, {"filename": "/gtadata/cut3.act", "start": 18699775, "end": 18700543}, {"filename": "/gtadata/cut3.rat", "start": 18700543, "end": 19007743}, {"filename": "/gtadata/cut3.raw", "start": 19007743, "end": 19929343}, {"filename": "/gtadata/cut30.fon", "start": 19929343, "end": 20093963}, {"filename": "/gtadata/cut30t.fon", "start": 20093963, "end": 20258583}, {"filename": "/gtadata/cut31.fon", "start": 20258583, "end": 20308511}, {"filename": "/gtadata/cut31t.fon", "start": 20308511, "end": 20358439}, {"filename": "/gtadata/cut32.fon", "start": 20358439, "end": 20369454}, {"filename": "/gtadata/cut32t.fon", "start": 20369454, "end": 20380469}, {"filename": "/gtadata/cut4.act", "start": 20380469, "end": 20381237}, {"filename": "/gtadata/cut4.rat", "start": 20381237, "end": 20688437}, {"filename": "/gtadata/cut4.raw", "start": 20688437, "end": 21610037}, {"filename": "/gtadata/cut40.fon", "start": 21610037, "end": 21651777}, {"filename": "/gtadata/cut40t.fon", "start": 21651777, "end": 21693517}, {"filename": "/gtadata/cut41.fon", "start": 21693517, "end": 21706578}, {"filename": "/gtadata/cut41t.fon", "start": 21706578, "end": 21719639}, {"filename": "/gtadata/cut5.act", "start": 21719639, "end": 21720407}, {"filename": "/gtadata/cut5.rat", "start": 21720407, "end": 22027607}, {"filename": "/gtadata/cut5.raw", "start": 22027607, "end": 22949207}, {"filename": "/gtadata/cut50.fon", "start": 22949207, "end": 22974559}, {"filename": "/gtadata/cut50t.fon", "start": 22974559, "end": 22999911}, {"filename": "/gtadata/cut51.fon", "start": 22999911, "end": 23002730}, {"filename": "/gtadata/cut51t.fon", "start": 23002730, "end": 23005549}, {"filename": "/gtadata/cut52.fon", "start": 23005549, "end": 23014513}, {"filename": "/gtadata/cut52t.fon", "start": 23014513, "end": 23023477}, {"filename": "/gtadata/cut53.fon", "start": 23023477, "end": 23036541}, {"filename": "/gtadata/cut53t.fon", "start": 23036541, "end": 23049605}, {"filename": "/gtadata/cuttext.fon", "start": 23049605, "end": 23090535}, {"filename": "/gtadata/english.fxt", "start": 23090535, "end": 23221356}, {"filename": "/gtadata/expscor1.fon", "start": 23221356, "end": 23223456}, {"filename": "/gtadata/expscor2.fon", "start": 23223456, "end": 23228236}, {"filename": "/gtadata/expscor8.fon", "start": 23228236, "end": 23230336}, {"filename": "/gtadata/f8_city1.fon", "start": 23230336, "end": 23293326}, {"filename": "/gtadata/f8_city2.fon", "start": 23293326, "end": 23361501}, {"filename": "/gtadata/f8_city3.fon", "start": 23361501, "end": 23424491}, {"filename": "/gtadata/f8_city4.fon", "start": 23424491, "end": 23478522}, {"filename": "/gtadata/f_bmg.rat", "start": 23478522, "end": 23483522}, {"filename": "/gtadata/f_bmg.raw", "start": 23483522, "end": 23498522}, {"filename": "/gtadata/f_city1.fon", "start": 23498522, "end": 23561512}, {"filename": "/gtadata/f_city2.fon", "start": 23561512, "end": 23629687}, {"filename": "/gtadata/f_city3.fon", "start": 23629687, "end": 23692677}, {"filename": "/gtadata/f_city4.fon", "start": 23692677, "end": 23746708}, {"filename": "/gtadata/f_dma.rat", "start": 23746708, "end": 23755210}, {"filename": "/gtadata/f_dma.raw", "start": 23755210, "end": 23780716}, {"filename": "/gtadata/f_key.fon", "start": 23780716, "end": 23848891}, {"filename": "/gtadata/f_logo0.rat", "start": 23848891, "end": 23956411}, {"filename": "/gtadata/f_logo0.raw", "start": 23956411, "end": 24278971}, {"filename": "/gtadata/f_logo1.rat", "start": 24278971, "end": 24386491}, {"filename": "/gtadata/f_logo1.raw", "start": 24386491, "end": 24709051}, {"filename": "/gtadata/f_logo2.rat", "start": 24709051, "end": 24816571}, {"filename": "/gtadata/f_logo2.raw", "start": 24816571, "end": 25139131}, {"filename": "/gtadata/f_logo3.rat", "start": 25139131, "end": 25246651}, {"filename": "/gtadata/f_logo3.raw", "start": 25246651, "end": 25569211}, {"filename": "/gtadata/f_logo4.rat", "start": 25569211, "end": 25676731}, {"filename": "/gtadata/f_logo4.raw", "start": 25676731, "end": 25999291}, {"filename": "/gtadata/f_logo5.rat", "start": 25999291, "end": 26106811}, {"filename": "/gtadata/f_logo5.raw", "start": 26106811, "end": 26429371}, {"filename": "/gtadata/f_logo6.rat", "start": 26429371, "end": 26536891}, {"filename": "/gtadata/f_logo6.raw", "start": 26536891, "end": 26859451}, {"filename": "/gtadata/f_logo7.rat", "start": 26859451, "end": 26966971}, {"filename": "/gtadata/f_logo7.raw", "start": 26966971, "end": 27289531}, {"filename": "/gtadata/f_lower0.rat", "start": 27289531, "end": 27489211}, {"filename": "/gtadata/f_lower0.raw", "start": 27489211, "end": 28088251}, {"filename": "/gtadata/f_lower1.rat", "start": 28088251, "end": 28287931}, {"filename": "/gtadata/f_lower1.raw", "start": 28287931, "end": 28886971}, {"filename": "/gtadata/f_mhead.fon", "start": 28886971, "end": 28992001}, {"filename": "/gtadata/f_mmiss.fon", "start": 28992001, "end": 29005016}, {"filename": "/gtadata/f_mtext.fon", "start": 29005016, "end": 29046276}, {"filename": "/gtadata/f_pal.raw", "start": 29046276, "end": 29047044}, {"filename": "/gtadata/f_play1.rat", "start": 29047044, "end": 29061426}, {"filename": "/gtadata/f_play1.raw", "start": 29061426, "end": 29104572}, {"filename": "/gtadata/f_play2.rat", "start": 29104572, "end": 29118954}, {"filename": "/gtadata/f_play2.raw", "start": 29118954, "end": 29162100}, {"filename": "/gtadata/f_play3.rat", "start": 29162100, "end": 29176482}, {"filename": "/gtadata/f_play3.raw", "start": 29176482, "end": 29219628}, {"filename": "/gtadata/f_play4.rat", "start": 29219628, "end": 29234010}, {"filename": "/gtadata/f_play4.raw", "start": 29234010, "end": 29277156}, {"filename": "/gtadata/f_play5.rat", "start": 29277156, "end": 29291538}, {"filename": "/gtadata/f_play5.raw", "start": 29291538, "end": 29334684}, {"filename": "/gtadata/f_play6.rat", "start": 29334684, "end": 29349066}, {"filename": "/gtadata/f_play6.raw", "start": 29349066, "end": 29392212}, {"filename": "/gtadata/f_play7.rat", "start": 29392212, "end": 29406594}, {"filename": "/gtadata/f_play7.raw", "start": 29406594, "end": 29449740}, {"filename": "/gtadata/f_play8.rat", "start": 29449740, "end": 29464122}, {"filename": "/gtadata/f_play8.raw", "start": 29464122, "end": 29507268}, {"filename": "/gtadata/f_playn.rat", "start": 29507268, "end": 29516268}, {"filename": "/gtadata/f_playn.raw", "start": 29516268, "end": 29543268}, {"filename": "/gtadata/f_upper.rat", "start": 29543268, "end": 29650788}, {"filename": "/gtadata/f_upper.raw", "start": 29650788, "end": 29973348}, {"filename": "/gtadata/french.fxt", "start": 29973348, "end": 30105427}, {"filename": "/gtadata/german.fxt", "start": 30105427, "end": 30262936}, {"filename": "/gtadata/italian.fxt", "start": 30262936, "end": 30403068}, {"filename": "/gtadata/miami.cmp", "start": 30403068, "end": 30807357}, {"filename": "/gtadata/mission.ini", "start": 30807357, "end": 32079665}, {"filename": "/gtadata/missmul1.fon", "start": 32079665, "end": 32080985}, {"filename": "/gtadata/missmul2.fon", "start": 32080985, "end": 32083218}, {"filename": "/gtadata/missmul8.fon", "start": 32083218, "end": 32084538}, {"filename": "/gtadata/movie.smk", "start": 32084538, "end": 32758382}, {"filename": "/gtadata/nyc.cmp", "start": 32758382, "end": 33226513}, {"filename": "/gtadata/pager1.fon", "start": 33226513, "end": 33235681}, {"filename": "/gtadata/pager2.fon", "start": 33235681, "end": 33256429}, {"filename": "/gtadata/player_a.dat", "start": 33256429, "end": 33257438}, {"filename": "/gtadata/replay.rep", "start": 33257438, "end": 33257462}, {"filename": "/gtadata/sanb.cmp", "start": 33257462, "end": 33677537}, {"filename": "/gtadata/score1.fon", "start": 33677537, "end": 33679637}, {"filename": "/gtadata/score2.fon", "start": 33679637, "end": 33684417}, {"filename": "/gtadata/score8.fon", "start": 33684417, "end": 33686517}, {"filename": "/gtadata/special.fxt", "start": 33686517, "end": 33817949}, {"filename": "/gtadata/street1.fon", "start": 33817949, "end": 33830175}, {"filename": "/gtadata/street2.fon", "start": 33830175, "end": 33863131}, {"filename": "/gtadata/style001.g24", "start": 33863131, "end": 37666678}, {"filename": "/gtadata/style001.gry", "start": 37666678, "end": 40374766}, {"filename": "/gtadata/style002.g24", "start": 40374766, "end": 44794601}, {"filename": "/gtadata/style002.gry", "start": 44794601, "end": 47550908}, {"filename": "/gtadata/style003.g24", "start": 47550908, "end": 52125829}, {"filename": "/gtadata/style003.gry", "start": 52125829, "end": 54842939}, {"filename": "/gtadata/sub1.fon", "start": 54842939, "end": 54855297}, {"filename": "/gtadata/sub2.fon", "start": 54855297, "end": 54888526}, {"filename": "/gtados.bat", "start": 54888526, "end": 54888579}, {"filename": "/gtados/UNIVBE.DRV", "start": 54888579, "end": 54901948}, {"filename": "/gtados/UVCONFIG.DAT", "start": 54901948, "end": 54923255}, {"filename": "/gtados/adrv688.dig", "start": 54923255, "end": 54934533}, {"filename": "/gtados/data/english.fxt", "start": 54934533, "end": 54950003}, {"filename": "/gtados/data/f_key.fon", "start": 54950003, "end": 55018178}, {"filename": "/gtados/data/f_mmiss.fon", "start": 55018178, "end": 55031193}, {"filename": "/gtados/data/f_mtext.fon", "start": 55031193, "end": 55072453}, {"filename": "/gtados/data/flag2.raw", "start": 55072453, "end": 55084453}, {"filename": "/gtados/data/french.fxt", "start": 55084453, "end": 55101723}, {"filename": "/gtados/data/german.fxt", "start": 55101723, "end": 55119073}, {"filename": "/gtados/data/gta.pcx", "start": 55119073, "end": 55212344}, {"filename": "/gtados/data/italian.fxt", "start": 55212344, "end": 55229223}, {"filename": "/gtados/data/joy.raw", "start": 55229223, "end": 55229565}, {"filename": "/gtados/data/joybox.raw", "start": 55229565, "end": 55245063}, {"filename": "/gtados/dino.bat", "start": 55245063, "end": 55245073}, {"filename": "/gtados/dos4gw.exe", "start": 55245073, "end": 55510469}, {"filename": "/gtados/gta24.exe", "start": 55510469, "end": 57528408}, {"filename": "/gtados/gta8.exe", "start": 57528408, "end": 59463491}, {"filename": "/gtados/gtafx.exe", "start": 59463491, "end": 61457622}, {"filename": "/gtados/icon.ico", "start": 61457622, "end": 61458700}, {"filename": "/gtados/iwav.dig", "start": 61458700, "end": 61461285}, {"filename": "/gtados/jammer.dig", "start": 61461285, "end": 61464504}, {"filename": "/gtados/k.exe", "start": 61464504, "end": 61911051}, {"filename": "/gtados/memcheck.log", "start": 61911051, "end": 61912594}, {"filename": "/gtados/mssdrvr.lst", "start": 61912594, "end": 61933028}, {"filename": "/gtados/nvdig.dig", "start": 61933028, "end": 61934743}, {"filename": "/gtados/proaudio.dig", "start": 61934743, "end": 61936887}, {"filename": "/gtados/rap10.dig", "start": 61936887, "end": 61939753}, {"filename": "/gtados/sb16.dig", "start": 61939753, "end": 61942606}, {"filename": "/gtados/sblaster.dig", "start": 61942606, "end": 61945748}, {"filename": "/gtados/sbpro.dig", "start": 61945748, "end": 61948549}, {"filename": "/gtados/sndscape.dig", "start": 61948549, "end": 61952720}, {"filename": "/gtados/sndsys.dig", "start": 61952720, "end": 61956069}, {"filename": "/gtados/startup.ini", "start": 61956069, "end": 61956116}, {"filename": "/gtados/ultra.dig", "start": 61956116, "end": 61965594}, {"filename": "/gtados/uvconfig.exe", "start": 61965594, "end": 62274976}, {"filename": "/gtawin.bat", "start": 62274976, "end": 62275019}, {"filename": "/gtawin/gtawin.exe", "start": 62275019, "end": 63184843}, {"filename": "/gtawin/mss32.dll", "start": 63184843, "end": 63344587}, {"filename": "/gtawin/pmpro16.dll", "start": 63344587, "end": 63363479}, {"filename": "/gtawin/pmpro32.dll", "start": 63363479, "end": 63396247}, {"filename": "/gtawin/settings.exe", "start": 63396247, "end": 63584663}, {"filename": "/gtawin/smackw32.dll", "start": 63584663, "end": 63656343}, {"filename": "/gtawin/wdir16.dll", "start": 63656343, "end": 63696757}, {"filename": "/gtawin/wdir32.dll", "start": 63696757, "end": 63741813}, {"filename": "/ireadme.doc", "start": 63741813, "end": 63747567}, {"filename": "/ireadme.txt", "start": 63747567, "end": 63750577}, {"filename": "/readme.doc", "start": 63750577, "end": 63755824}, {"filename": "/readme.txt", "start": 63755824, "end": 63758519}, {"filename": "/winsettings.bat", "start": 63758519, "end": 63758564}], "remote_package_size": 63758564});
+
+  })();
+
+Module['arguments'] = [ '-c', 'cycles max', './gta-auto.bat' ];
+</script>
+    <script async type="text/javascript" src="dosbox.js"></script>
+    <script>
+    (function () {
+      var escapes = 0;
+      var timer = setInterval(function () {
+        var title = document.title || '';
+        if (title.indexOf('GTA24') !== -1 || title.indexOf('GTA8') !== -1 || escapes >= 12) {
+          clearInterval(timer);
+          return;
+        }
+        if (title.indexOf('UVCONFIG') !== -1) {
+          var canvas = document.querySelector('canvas') || document;
+          ['keydown', 'keyup'].forEach(function (type) {
+            var ev = new KeyboardEvent(type, {
+              key: 'Escape',
+              code: 'Escape',
+              bubbles: true,
+              cancelable: true,
+              keyCode: 27,
+              charCode: 0,
+              which: 27
+            });
+            Object.defineProperty(ev, 'keyCode', { value: 27 });
+            Object.defineProperty(ev, 'which', { value: 27 });
+            canvas.dispatchEvent(ev);
+          });
+          escapes++;
+        }
+      }, 400);
+    })();
+    </script>
+    <script>
+    (function () {
+      var frame = document.getElementById('game-frame');
+      var canvas = document.getElementById('canvas');
+      function fit() {
+        var aw = window.innerWidth || 1280;
+        var ah = window.innerHeight || 720;
+        var fw = Math.max(1, Math.floor(Math.min(aw, ah * 4 / 3)));
+        var fh = Math.max(1, Math.floor(fw * 3 / 4));
+        frame.style.width = fw + 'px';
+        frame.style.height = fh + 'px';
+        var cw = canvas.width || 640;
+        var ch = canvas.height || 480;
+        var scale = Math.min(fw / cw, fh / ch);
+        var w = Math.max(1, Math.floor(cw * scale));
+        var h = Math.max(1, Math.floor(ch * scale));
+        var ws = w + 'px', hs = h + 'px';
+        if (canvas.style.width !== ws || canvas.style.height !== hs) {
+          canvas.style.width = ws;
+          canvas.style.height = hs;
+        }
+      }
+      if (window.ResizeObserver) new ResizeObserver(fit).observe(frame);
+      window.addEventListener('resize', fit);
+      setInterval(fit, 200);
+      fit();
+    })();
+    </script>
+  </body>
+</html>

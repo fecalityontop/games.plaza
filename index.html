@@ -1,115 +1,73 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="Cross-Origin-Opener-Policy" content="same-origin">
-    <meta http-equiv="Cross-Origin-Embedder-Policy" content="require-corp">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title></title>
-    <link rel="stylesheet" href="styles.css">
-    <link rel="icon" href="">
-</head>
-<body>
-    <header>
-        <img src="media/logo.png" id="logo" onclick="theo()" draggable="false">
-        <img src="media/games.png" class="tab" id="tabgames" onclick="changeTab('games')" draggable="false">
-        <img src="media/proxy.png" class="tab" id="tabproxy" onclick="changeTab('proxy')" draggable="false">
-        <img src="media/gear.png" id="gear" onclick="settings()" draggable="false">
-        <img src="media/help.png" id="help" onclick="help()" draggable="false">
-    </header>
-    <div id="main">
-        <div class="window" id="windowgames">
-            <button id="prev-btn" class="arrow-btn" onclick="changePage(-1)">&#10094;</button>
-            <div id="grid">
+<html>
+    <head>
+        <link href="favicon.ico" rel="icon">
+        <link href="style.css" rel="stylesheet">
+    </head>
+    <body>
+        <header>
+            <div class="header-left">
+                <img src="media/logo.png" id="logo" onclick="goHome()">
+                <a id="settings-tab" href="/settings">settings</a>
             </div>
-            <button id="next-btn" class="arrow-btn" onclick="changePage(1)">&#10095;</button>
-        </div>
-        <div class="window" id="windowproxy">
-            <h1>Proxy opened in new tab! (This may be blocked I still don't know. If it is this also breaks OSU)</h1>
-        </div>
-        <div class="window" id="helpwin">
-            <h1>How To Play</h1>
-            <p1>Just click on the game icon and it will open up the game in a new tab</p1>
-            <h2>How do I close the game?</h2>
-            <p2>Press Ctrl+F when a game is open and it will shut down. Feel free to open the site on multiple tabs to have more games running at once.</p2>
-            <h2>It's stuck loading/had an error</h2>
-            <p3>
-                Attempt to refresh the page by pressing "Ctrl+R" or "Ctrl+Shift+R".
-                <br>
-                If it's still broken then IDFK what to tell you. I'm still working on the site so just wait and it might be fixed
-            </p3>
-            <div id="x" onclick="help()">X</div>
-        </div>
-        <div class="window" id="settingswin">
-            <div class="setting">
-                <span>Tab Cloak</span>
-                <select id="set-cloak">
-                    <option value="none">None</option>
-                    <option value="google">Google</option>
-                    <option value="focus">Focus Portal</option>
+            <span id="proxy" onclick="window.open(`https://halcyon-u0wa.onrender.com/`)">proxy</span>
+        </header>
+        <div id="main">
+            <div id="toolbar">
+                <input id="search" type="search" placeholder="Search games..." autocomplete="off" spellcheck="false" aria-label="Search games">
+                <select id="sort" aria-label="Sort games">
+                    <option value="newest">Newest</option>
+                    <option value="az" selected>A–Z</option>
                 </select>
+                <span id="count"></span>
             </div>
-            <div class="setting">
-                <span>Music</span>
-                <select id="set-music">
-                    <option value="on">On</option>
-                    <option value="off">Off</option>
-                </select>
+            <div id="games">
             </div>
-            <div id="x" onclick="settings()">X</div>
         </div>
-    </div>
-
-    <div id="cover">
-        <button id="enterbut" onclick="
-            document.getElementById('cover').style.opacity=0; 
-            music.play();
-            setTimeout(()=>{
-                document.getElementById('cover').style.display = 'none';
-            }, 1000)">Enter</button>
-    </div>
-    <iframe id="gameframe"></iframe>
-    <div id="tooltip"></div>
+    </body>
+    <script src="settings.js"></script>
     <script src="script.js"></script>
     <script src="pig.js"></script>
-<script>
-(async function () {
-  var FLAG = "root-coi-reloaded";
-  var MIGRATE = "gp-migrated-to-sw-v2";
-  function readFlag() { try { return sessionStorage.getItem(FLAG); } catch (e) { return null; } }
-  function writeFlag() { try { sessionStorage.setItem(FLAG, "1"); return true; } catch (e) { return false; } }
-  function clearFlag() { try { sessionStorage.removeItem(FLAG); } catch (e) {} }
+    <script>
+    (async function () {
+    var FLAG = "root-coi-reloaded";
+    var MIGRATE = "gp-migrated-to-sw-v2";
+    function readFlag() { try { return sessionStorage.getItem(FLAG); } catch (e) { return null; } }
+    function writeFlag() { try { sessionStorage.setItem(FLAG, "1"); return true; } catch (e) { return false; } }
+    function clearFlag() { try { sessionStorage.removeItem(FLAG); } catch (e) {} }
 
-  if (window.crossOriginIsolated) { clearFlag(); return; }
-  if (!("serviceWorker" in navigator)) return;
-  try {
-    if (!localStorage.getItem(MIGRATE)) {
-      var regs = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map(function (r) { return r.unregister(); }));
-      if (window.caches) {
-        var ckeys = await caches.keys();
-        await Promise.all(ckeys.map(function (k) { return caches.delete(k); }));
-      }
-      localStorage.setItem(MIGRATE, "1");
-    }
-  } catch (e) {}
+    // The worker now sends COOP/COEP itself, so crossOriginIsolated is true
+    // even before a service worker controls the page. Check the controller,
+    // not isolation, or split assets are never reassembled.
+    if (!("serviceWorker" in navigator)) return;
+    if (navigator.serviceWorker.controller) { clearFlag(); return; }
+    try {
+        if (!localStorage.getItem(MIGRATE)) {
+        var regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(function (r) { return r.unregister(); }));
+        if (window.caches) {
+            var ckeys = await caches.keys();
+            await Promise.all(ckeys.map(function (k) { return caches.delete(k); }));
+        }
+        localStorage.setItem(MIGRATE, "1");
+        }
+    } catch (e) {}
 
-  if (readFlag() === "1") return;
+    if (readFlag() === "1") return;
 
-  navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then(function (reg) {
-    var reload = function () {
-      if (!writeFlag()) return;
-      window.location.replace(window.location.href);
-    };
-    if (reg.active && !navigator.serviceWorker.controller) { reload(); return; }
-    navigator.serviceWorker.addEventListener("controllerchange", reload, { once: true });
-    var w = reg.installing || reg.waiting;
-    if (w && w.state === "installed") w.postMessage({ type: "skip-waiting" });
-    if (w) w.addEventListener("statechange", function () {
-      if (w.state === "installed") w.postMessage({ type: "skip-waiting" });
-    });
-  }).catch(function (e) { console.warn("sw register failed", e); });
-})();
-</script>
-</body>
-</html> 
+    navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then(function (reg) {
+        var reload = function () {
+        if (!writeFlag()) return;
+        window.location.replace(window.location.href);
+        };
+        if (reg.active && !navigator.serviceWorker.controller) { reload(); return; }
+        navigator.serviceWorker.addEventListener("controllerchange", reload, { once: true });
+        var w = reg.installing || reg.waiting;
+        if (w && w.state === "installed") w.postMessage({ type: "skip-waiting" });
+        if (w) w.addEventListener("statechange", function () {
+        if (w.state === "installed") w.postMessage({ type: "skip-waiting" });
+        });
+    }).catch(function (e) { console.warn("sw register failed", e); });
+    })();
+    </script>
+</html>

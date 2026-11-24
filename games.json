@@ -123,7 +123,7 @@
         "name": "Friday Night Funkin'",
         "idname": "fnf"
     },
-    {
+    {   
         "name": "Tiny Fishing",
         "idname": "tinyfish"
     },
@@ -134,5 +134,29 @@
     {
         "name": "osu!",
         "idname": "osu"
+    },
+    {
+        "name": "Doki Doki Literature Club",
+        "idname": "ddlc"
+    },
+    {
+        "name": "Pou",
+        "idname": "pou"
+    },
+    {
+        "name": "Grand Theft Auto",
+        "idname": "gta"
+    },
+    {
+        "name": "Counter Strike",
+        "idname": "cs"
+    },
+    {
+        "name": "Ultrakill",
+        "idname": "ultrakill"
+    },
+    {
+        "name": "Smashy Road",
+        "idname": "smashy"
     }
 ]

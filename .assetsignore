@@ -2,3 +2,9 @@
 .github/
 *.log
 .vscode/
+.wrangler/
+
+# Source package for GTA IV - not served by the site. Its original 7.8 GB ISO
+# and 66 MB wasm exceed Cloudflare's per-asset size limit; the playable copy
+# lives in games/gta4/ with both files split into .partNNN chunks.
+gta4-web-v0.1.8/

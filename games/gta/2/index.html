@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GTA2</title>
+  <style>
+    :root { color-scheme: dark; --bg: #0b0b0d; --fg: #e8e6e3; --muted: #9a978f; --accent: #e63946; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+      font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
+    main { height: 100%; display: flex; flex-direction: column; }
+    #game { flex: 1; min-height: 0; display: flex; }
+    #screen { flex: 1; width: 100%; height: 100%; display: block; outline: none; image-rendering: pixelated; }
+    #status { position: fixed; left: 1rem; bottom: 2.2rem; margin: 0; color: var(--muted); z-index: 5; }
+    #status.error { color: #ff8a8a; }
+    #state-toast { position: fixed; left: 50%; bottom: 18%; transform: translateX(-50%); z-index: 30; pointer-events: none;
+      padding: .5rem 1rem; border-radius: 6px; background: rgba(0, 0, 0, .78); color: #fff; font-weight: 600; }
+    #state-toast.error { color: #ff8a8a; }
+    #saves-screen { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center;
+      padding: 16px; background: rgba(0, 0, 0, .72); }
+    #saves-screen[hidden] { display: none; }
+    #controls-screen { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center;
+      padding: 16px; background: rgba(0, 0, 0, .72); }
+    #controls-screen[hidden] { display: none; }
+    .controls-panel { width: min(560px, 100%); }
+    .controls-list { display: grid; gap: .35rem; }
+    .controls-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .3rem .5rem;
+      border-radius: 6px; background: #1d2027; }
+    .controls-row button, .controls-actions button { min-width: 8.5rem; padding: .4rem .7rem; border-radius: 5px;
+      border: 1px solid #3a3f4b; background: #262a33; color: #e8e8e8; cursor: pointer; font: inherit; font-size: .9rem; }
+    .controls-row button.waiting { border-color: #f5c518; color: #f5c518; }
+    .controls-actions { display: flex; justify-content: flex-end; gap: .5rem; }
+    .controls-actions button.primary { background: #f5c518; border-color: #f5c518; color: #111; font-weight: 600; }
+    .saves-panel { width: min(980px, 100%); max-height: 100%; overflow: auto; padding: 1.2rem 1.4rem; border-radius: 10px;
+      background: #15171c; border: 1px solid #2a2e37; color: #e8e8e8; }
+    .saves-head { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; margin-bottom: .8rem; }
+    .saves-head h2 { margin: 0; font-size: 1.4rem; color: #f5c518; }
+    .saves-keys { color: #8b919c; font-size: .85rem; flex: 1; }
+    .saves-close { background: none; border: 0; color: #c9c9c9; font-size: 1.2rem; cursor: pointer; }
+    .saves-note { color: #8b919c; font-size: .85rem; margin: .6rem 0; }
+    .saves-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: .8rem; }
+    .save-card { display: flex; flex-direction: column; border-radius: 8px; overflow: hidden; background: #1d2027;
+      border: 1px solid #2a2e37; }
+    .save-card img, .save-blank { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: #0c0d10; }
+    .save-blank { display: flex; align-items: center; justify-content: center; color: #5d636e; font-size: .9rem; }
+    .save-text { display: flex; flex-direction: column; gap: .15rem; padding: .55rem .7rem 0; min-height: 3.6rem; }
+    .save-slot { color: #f5c518; font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; }
+    .save-text strong { font-size: .95rem; }
+    .save-text small { color: #9aa0aa; }
+    .save-actions { display: flex; gap: .4rem; padding: .6rem .7rem .7rem; margin-top: auto; }
+    .save-actions button { flex: 1; padding: .4rem .5rem; white-space: nowrap; border-radius: 5px; border: 1px solid #3a3f4b; background: #262a33;
+      color: #e8e8e8; cursor: pointer; font: inherit; font-size: .85rem; }
+    .save-actions button.primary { background: #f5c518; border-color: #f5c518; color: #111; font-weight: 600; }
+    .save-actions button.quiet { flex: 0 0 auto; color: #9aa0aa; }
+    .save-actions button.armed { background: #b3261e; border-color: #b3261e; color: #fff; }
+    .save-actions:has(.armed) button:not(.armed) { display: none; }
+    .save-actions button:disabled { opacity: .45; cursor: default; }
+    #coop-banner { position: fixed; left: 50%; top: 4.5rem; transform: translateX(-50%); z-index: 4; margin: 0;
+      padding: .5rem 1rem; border-radius: 6px; background: rgba(8,9,12,.85); color: #ffd23f; font-weight: 600;
+      max-width: min(90vw, 40rem); text-align: center; pointer-events: none; }
+    #coop-banner.error { color: #ff8a8a; }
+    #chat-log { position: fixed; left: 1rem; bottom: 4.6rem; z-index: 4; width: min(28rem, 60vw); pointer-events: none;
+      display: flex; flex-direction: column; gap: .15rem; }
+    #chat-log p { margin: 0; padding: .15rem .5rem; border-radius: 4px; background: rgba(0,0,0,.6); color: #eee;
+      font: 14px/1.35 system-ui, sans-serif; text-shadow: 0 1px 0 #000; transition: opacity 1s; overflow-wrap: anywhere; }
+    #chat-log p.note { color: #aaa; font-style: italic; }
+    #chat-log p.old { opacity: 0; }
+    #chat-input { position: fixed; left: 1rem; bottom: 2.6rem; z-index: 7; width: min(28rem, 60vw); box-sizing: border-box;
+      font: 14px system-ui, sans-serif; padding: .45rem .6rem; border-radius: 6px; border: 1px solid #f5c518;
+      background: rgba(10,10,12,.92); color: #fff; outline: none; }
+    #tools { position: fixed; left: 1rem; bottom: .5rem; z-index: 5; display: flex; gap: .35rem; flex-wrap: wrap; max-width: calc(100vw - 2rem); }
+    #tools button, #tools label { padding: .3rem .55rem; border-radius: 5px; border: 1px solid #3a3f4b; background: rgba(20,22,28,.9);
+      color: #d9d9d9; cursor: pointer; font: 12px/1.2 system-ui, sans-serif; }
+    #tools input[type=file] { display: none; }
+    #fps { position: fixed; left: .5rem; bottom: .5rem; margin: 0; padding: .15rem .35rem; border-radius: 4px;
+      background: rgba(0,0,0,.55); color: #9f9; font: 12px/1 monospace; z-index: 6; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <main>
+    <section id="game">
+      <canvas id="screen" tabindex="0"></canvas>
+    </section>
+    <p id="status" role="status">Loading?</p>
+    <p id="coop-banner" role="status" hidden></p>
+    <p id="fps" hidden></p>
+    <div id="tools" hidden>
+      <button id="camera" type="button">Camera: Modern</button>
+      <button id="view-distance" type="button">View: Normal</button>
+      <button id="map-open" type="button" title="Full map (M): set a waypoint">Map (M)</button>
+      <button id="minimap-toggle" type="button" aria-pressed="true">Minimap</button>
+      <button id="fps-toggle" type="button" aria-pressed="false">FPS</button>
+      <button id="fullscreen" type="button">Full screen</button>
+      <button id="mute" type="button">Mute</button>
+      <button id="saves-open" type="button">Saves</button>
+      <button id="controls-open" type="button" title="Change the game's keys">Controls</button>
+      <button id="export-saves" type="button">Export saves</button>
+      <label>Import saves<input id="import-saves" type="file" accept="application/json,.json"></label>
+      <button id="lang-toggle" type="button">English</button>
+    </div>
+    <!-- hidden stubs for legacy shell.js references -->
+    <div id="topnav" hidden></div>
+    <div id="landing" hidden>
+      <div id="continue-root" hidden></div>
+      <progress id="files-bar" max="1" value="0" hidden></progress>
+      <span id="files-state" hidden></span>
+      <div id="options-root"></div>
+      <div id="leaderboard-root"></div>
+      <div id="kb-root"></div><div id="legend-root"></div><div id="pad-root"></div><div id="pad-legend-root"></div>
+      <span id="pad-status"></span>
+      <div id="controls-tabs"></div><div id="panel-kb"></div><div id="panel-pad"></div>
+    </div>
+    <div id="picker" hidden>
+      <h1></h1>
+      <div id="coop" hidden>
+        <input id="coop-name"><button id="coop-host"></button><input id="coop-code"><button id="coop-join"></button>
+        <p id="coop-state"></p><p id="coop-invite" hidden><input id="coop-link"><button id="coop-copy"></button></p>
+        <div id="coop-results" hidden></div><ol id="coop-players"></ol>
+        <select id="coop-mode"></select><select id="coop-district"></select>
+        <input id="coop-minutes"><input id="coop-kills"><input id="coop-points"><input id="coop-ff" type="checkbox">
+        <p id="coop-mode-help"></p><p id="coop-lang"></p><input id="coop-crew"><datalist id="coop-crew-list"></datalist>
+        <div id="coop-crews"></div><button id="coop-start" hidden></button><span id="coop-start-why"></span>
+      </div>
+      <div id="saved" hidden><p id="saved-info"></p><button id="play-saved"></button><button id="forget-files"></button></div>
+      <input id="folder" type="file"><div id="freeware"><button id="download-freeware"></button><input id="installer-file" type="file"></div>
+    </div>
+  </main>
+  <script type="module" src="shell.js?v=local"></script>
+</body>
+</html>

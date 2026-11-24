@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <link href="favicon.ico" rel="icon">
+        <link href="style.css" rel="stylesheet">
+    </head>
+    <body>
+        <script>
+            window.leaving = false;
+            window.goHome = function () {
+                window.leaving = true;
+                try {
+                    var frame = document.getElementById("gameframe");
+                    if (frame) frame.src = "about:blank";
+                    window.stop();
+                } catch (e) {}
+                window.location.replace("/");
+            };
+        </script>
+        <header>
+            <div class="header-left">
+                <img src="media/logo.png" id="logo" onclick="goHome()">
+                <a id="settings-tab" href="/settings">settings</a>
+            </div>
+        </header>
+        <div id="main" class="game-page">
+            <iframe id="gameframe" title="Game" tabindex="0" allow="autoplay; fullscreen; gamepad; clipboard-read; clipboard-write"></iframe>
+            <a id="newtab" href="#" target="_blank" rel="noopener">Open in new tab</a>
+        </div>
+    </body>
+    <script src="pig.js"></script>
+    <script src="settings.js"></script>
+    <script>
+    (async function () {
+    var FLAG = "root-coi-reloaded";
+    var MIGRATE = "gp-migrated-to-sw-v2";
+    function readFlag() { try { return sessionStorage.getItem(FLAG); } catch (e) { return null; } }
+    function writeFlag() { try { sessionStorage.setItem(FLAG, "1"); return true; } catch (e) { return false; } }
+    function clearFlag() { try { sessionStorage.removeItem(FLAG); } catch (e) {} }
+
+    // The worker now sends COOP/COEP itself, so crossOriginIsolated is true
+    // even before a service worker controls the page. Check the controller,
+    // not isolation, or /games/gta4's split assets are never reassembled.
+    if (!("serviceWorker" in navigator)) return;
+    if (navigator.serviceWorker.controller) { clearFlag(); return; }
+    try {
+        if (!localStorage.getItem(MIGRATE)) {
+        var regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(function (r) { return r.unregister(); }));
+        if (window.caches) {
+            var ckeys = await caches.keys();
+            await Promise.all(ckeys.map(function (k) { return caches.delete(k); }));
+        }
+        localStorage.setItem(MIGRATE, "1");
+        }
+    } catch (e) {}
+
+    if (readFlag() === "1") return;
+
+    navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then(function (reg) {
+        var reload = function () {
+        if (window.leaving) return;
+        if (!writeFlag()) return;
+        window.location.replace(window.location.href);
+        };
+        if (reg.active && !navigator.serviceWorker.controller) { reload(); return; }
+        navigator.serviceWorker.addEventListener("controllerchange", reload, { once: true });
+        var w = reg.installing || reg.waiting;
+        if (w && w.state === "installed") w.postMessage({ type: "skip-waiting" });
+        if (w) w.addEventListener("statechange", function () {
+        if (w.state === "installed") w.postMessage({ type: "skip-waiting" });
+        });
+    }).catch(function (e) { console.warn("sw register failed", e); });
+    })();
+    </script>
+    <script>
+    (async function () {
+        var id = new URLSearchParams(window.location.search).get("g");
+        var valid = false;
+        if (id) {
+            try {
+                var games = await (await fetch("/games.json")).json();
+                valid = games.some(function (game) { return game.idname === id; });
+            } catch (e) {}
+            if (!valid) valid = /^[a-zA-Z0-9_-]+$/.test(id);
+        }
+        if (!valid) {
+            window.location.replace("/");
+            return;
+        }
+        var frame = document.getElementById("gameframe");
+        var gamePath = "/games/" + encodeURIComponent(id) + "/";
+        frame.src = gamePath;
+        frame.addEventListener("load", function () { frame.focus(); }, { once: true });
+        document.getElementById("newtab").href = gamePath + "index.html";
+    })();
+    </script>
+</html>

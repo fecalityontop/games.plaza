@@ -31,8 +31,9 @@ await import(files["main.js"] ? `./main.js?v=${files["main.js"]}` : "./main.js")
   function readFlag() { try { return sessionStorage.getItem(FLAG); } catch (e) { return null; } }
   function writeFlag() { try { sessionStorage.setItem(FLAG, "1"); return true; } catch (e) { return false; } }
   function clearFlag() { try { sessionStorage.removeItem(FLAG); } catch (e) {} }
-  if (window.crossOriginIsolated) { clearFlag(); return; }
+  // COOP/COEP now come from the worker; only a controlling SW means ready.
   if (!("serviceWorker" in navigator)) return;
+  if (navigator.serviceWorker.controller) { clearFlag(); return; }
   if (readFlag() === "1") return;
   navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then(function (reg) {
     var reload = function () {

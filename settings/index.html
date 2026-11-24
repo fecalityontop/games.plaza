@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <link href="/favicon.ico" rel="icon">
+        <link href="/style.css" rel="stylesheet">
+    </head>
+    <body>
+        <header>
+            <div class="header-left">
+                <img src="/media/logo.png" id="logo" onclick="window.location.href = '/'">
+                <a class="active" id="settings-tab" href="/settings">settings</a>
+            </div>
+            <span id="proxy" onclick="window.open(`https://halcyon-u0wa.onrender.com/`)">proxy</span>
+        </header>
+        <div class="window" id="settingswin">
+            <div class="setting">
+                <label for="set-cloak">Tab Cloak</label>
+                <select id="set-cloak" aria-label="Tab cloak">
+                    <option value="none">None</option>
+                    <option value="google">Google</option>
+                    <option value="focus">Focus Portal</option>
+                </select>
+            </div>
+        </div>
+    </body>
+    <script src="/settings.js"></script>
+</html>

@@ -1,143 +1,7 @@
-let audio = new Audio("media/hover.wav");
-let audio2 = new Audio("media/stayhover.wav");
-let audio3 = new Audio("media/flip.wav");
-let audio4 = new Audio("media/help.wav");
-let music = new Audio("media/music.mp3")
-music.addEventListener('timeupdate', function(){
-    let buffer = .44
-    if(this.currentTime > this.duration - buffer){
-        this.currentTime = 0
-        this.play()
-    }
-});
-
-let currentSettings = {
-    cloak : "google",
-    music : "on"
-}
-
-let helpwin = document.getElementById("helpwin");
-let helpopen = false;
-let settingswin = document.getElementById("settingswin");
-let settingsopen = false;
-function help() {
-    helpopen = !helpopen;
-    if (helpopen && settingsopen) {
-        settings();
-    }
-    if (helpopen) {
-        helpwin.style.display = "flex";
-    }
-    else {
-        helpwin.style.display = "none";
-    }
-    aud = audio4.cloneNode(true)
-    aud.volume = .1;
-    aud.play();
-}
-function settings() {
-    settingsopen = !settingsopen;
-    if (helpopen && settingsopen) {
-        help();
-    }
-    if (settingsopen) {
-        settingswin.style.display = "flex";
-    }
-    else {
-        settingswin.style.display = "none";
-    }
-    aud = audio4.cloneNode(true)
-    aud.volume = .1;
-    aud.play();
-}
-
-let favi = document.querySelector("link[rel*='icon']");
-function changeSettings(key, value) {
-    currentSettings[key] = value;
-    localStorage.setItem("gpSettings", JSON.stringify(currentSettings));
-    if (key == "cloak") {
-        if (value == "none") {
-            favi.href = "favicon.ico";
-            document.title = "games.plaza"
-        }
-        else if (value == "google") {
-            favi.href = "favicon2.ico"
-            document.title = "Google"
-        }
-        else if (value == "focus") {
-            favi.href = "favicon3.ico"
-            document.title = "Portal"
-        }
-    }
-    if (key == "music") {
-        if (value == "on") {
-            music.volume = 1;
-        }
-        else if (value == "off") {
-            music.volume = 0;
-        }
-    }
-}
-
-let localSettings = localStorage.getItem("gpSettings");
-if (localSettings) {
-    currentSettings = JSON.parse(localSettings);
-}
-let entries = Object.entries(currentSettings);
-for (var i = 0; i < Object.keys(currentSettings).length; i++) {
-    let [key, value] = entries[i];
-    changeSettings(key, value);
-}
-
-let setcloak = document.getElementById('set-cloak');
-setcloak.value = currentSettings.cloak;
-setcloak.onchange = (event) => {
-    let inputText = event.target.value;
-    changeSettings("cloak", inputText)
-}
-let setmusic = document.getElementById('set-music');
-setmusic.value = currentSettings.music;
-setmusic.onchange = (event) => {
-    let inputText = event.target.value;
-    changeSettings("music", inputText)
-}
-
-let currentTab = 1;
-var tabsArray = ["games", "proxy"];
-var tabsLength = tabsArray.length;
-
-function changeTab(tab) {
-    const newUrl = `${window.location.pathname}?tab=${tab}`;
-    window.history.pushState({ tab }, '', newUrl);
-    for (var i = 0; i < tabsLength; i++) {
-        if (tabsArray[i]==tab) {
-            document.getElementById("window"+tabsArray[i]).style.display = "flex";
-            document.getElementById("tab"+tabsArray[i]).style.filter = "brightness(2)";
-        }
-        else {
-            document.getElementById("window"+tabsArray[i]).style.display = "none";
-            document.getElementById("tab"+tabsArray[i]).style.filter = "brightness(1)";
-        }
-    }
-    if (tab=="proxy") {
-        window.open("https://halcyon-u0wa.onrender.com/");
-    }
-}
-
-window.addEventListener('popstate', (event) => {
-    const params = new URLSearchParams(window.location.search);
-    changeTab(params.get('tab'));
-  });
-
-  window.addEventListener('DOMContentLoaded', () => {
-    const params = new URLSearchParams(window.location.search);
-    let tab = params.get('tab');
-    changeTab(tab ? tab : "games");
-  });
-
-let amount = 18;
-let currentPage = 0;
 let games = [];
+let searchTerm = "";
+let sortMode = "az";
+let theoArmed = true;
 window.gameOpen = false;
 
 async function loadGames() {
@@ -146,148 +10,69 @@ async function loadGames() {
     renderGrid();
 }
 
-function renderGrid() {
-    let gameholder = document.getElementById("grid");
-    gameholder.innerHTML = "";
-
-    let start = currentPage * amount;
-    let end = start + amount;
-    let currentGames = games.slice(start, end);
-
-    for (let i = 0; i < amount; i++) {
-        let game = document.createElement("button");
-        game.id = "b" + (i + 1);
-        gameholder.appendChild(game);
-
-        let gameData = currentGames[i];
-        if (gameData != null) {
-            game.className = "game-btn bwg";
-            game.style.backgroundImage = "url(media/games/" + gameData.idname + ".png)";
-
-            game.addEventListener("mouseenter", function() {
-                mouseEnter(gameData.name, true);
-            });
-            game.addEventListener("mouseleave", function() {
-                mouseLeave();
-            });
-            game.onclick = function() {
-                play("/games/" + gameData.idname);
-            };
-        } else {
-            game.className = "game-btn";
-            game.style.backgroundImage = "url(media/missing.gif)";
-            game.style.cursor = "default";
-            game.onclick = null;
-        }
-    }
-
-    updateArrows();
-}
-
-function changePage(direction) {
-    aud = audio3.cloneNode(true)
-    aud.volume = .1;
-    aud.play();
-
-    let grid = document.getElementById("grid");
-    
-    grid.style.opacity = "0";
-
-    setTimeout(() => {
-        let maxPage = Math.ceil(games.length / amount) - 1;
-        currentPage += direction;
-
-        if (currentPage < 0) currentPage = 0;
-        if (currentPage > maxPage) currentPage = maxPage;
-        renderGrid();
-        clearTimeout(timer);    
-
-        grid.style.opacity = "1";
-
-        setTimeout(() => {
-            isAnimating = false;
-            updateArrows();
-        }, 250);
-
-    }, 250);
-}
-
-function updateArrows() {
-    let maxPage = Math.ceil(games.length / amount) - 1;
-    let prevBtn = document.getElementById("prev-btn");
-    let nextBtn = document.getElementById("next-btn");
-
-    if (currentPage > 0) {
-        prevBtn.style.visibility = "visible";
-    } else {
-        prevBtn.style.visibility = "hidden";
-    }
-
-    if (currentPage < maxPage) {
-        nextBtn.style.visibility = "visible";
-    } else {
-        nextBtn.style.visibility = "hidden";
-    }
-}
-
 loadGames();
 
-let tooltip = document.getElementById("tooltip");
-
-let timer = 0;
-let TIMEOUT = 500;
-
-function mouseEnter(e, sound) {
-    if (sound) {
-        aud = audio.cloneNode(true)
-        aud.volume = .1;
-        aud.play();
+function visibleGames() {
+    let term = searchTerm.trim().toLowerCase();
+    let list = games.map(function (game, index) { return { game: game, index: index }; });
+    if (term) {
+        list = list.filter(function (item) {
+            return item.game.name.toLowerCase().includes(term) ||
+                   item.game.idname.toLowerCase().includes(term);
+        });
     }
-    timer = setTimeout(() => {
-        if (sound) {
-            aud = audio2.cloneNode(true)
-            aud.volume = .1;
-            aud.play();
+    if (sortMode === "az") {
+        list.sort(function (a, b) {
+            return a.game.name.localeCompare(b.game.name, undefined, { sensitivity: "base" });
+        });
+    } else {
+        list.sort(function (a, b) { return a.index - b.index; });
+    }
+    return list.map(function (item) { return item.game; });
+}
+
+function renderGrid() {
+    let shown = visibleGames();
+    let gameholder = document.getElementById("games");
+    gameholder.innerHTML = "";
+    for (let i = 0; i < shown.length; i++) {
+        let gameData = shown[i];
+        let game = document.createElement("div");
+        gameholder.appendChild(game);
+        game.className = "game";
+        game.addEventListener("click", function(){ play(gameData.idname) });
+        let thumbdiv = document.createElement("div");
+        game.appendChild(thumbdiv);
+        thumbdiv.className = "game-thumb";
+        let thumbimg = document.createElement("div");
+        thumbdiv.appendChild(thumbimg);
+        thumbimg.style.backgroundImage = `url(media/games/${gameData.idname}.png)`
+        thumbimg.className = "game-img";
+        let gamename = document.createElement("span");
+        game.appendChild(gamename);
+        gamename.innerHTML = gameData.name;
+    }
+    document.getElementById("count").textContent =
+        shown.length + (shown.length === 1 ? " game" : " games");
+}
+
+document.getElementById("search").addEventListener("input", function (event) {
+    searchTerm = event.target.value;
+    if (searchTerm.trim().toLowerCase() === "theo") {
+        if (theoArmed) {
+            theo();
+            theoArmed = false;
         }
-        tooltip.style.display = "block";
-        tooltip.innerText = e;
-
-    }, TIMEOUT);
-}
-function mouseLeave() {
-    clearTimeout(timer);
-    tooltip.style.display = "none";
-}
-
-document.addEventListener("mousemove", (e) => {
-  x = e.clientX;
-  y = e.clientY;
-  tooltip.style.top = `${y}px`;
-  tooltip.style.left = `${x+10}px`;
+    } else {
+        theoArmed = true;
+    }
+    renderGrid();
 });
 
-let gameframe = document.getElementById("gameframe");
-let cover = document.getElementById("cover");
-
-function play(path) {
-    window.gameOpen = true;
-    music.pause();
-    let zip = new Audio("media/zip.wav");
-    zip.volume = .5;
-    zip.play();
-    document.getElementById("enterbut").style.display = "none";
-    cover.style.transition = "opacity .5s"
-    cover.style.display = "block";
-    cover.style.opacity = "0"
-    window.requestAnimationFrame(() => {
-        cover.style.opacity = "1";
-    });
-    setTimeout(()=>{
-        gameframe.src = path;
-        gameframe.style.opacity = "1";
-        gameframe.style.display = "block";
-    }, 300)
-}
+document.getElementById("sort").addEventListener("change", function (event) {
+    sortMode = event.target.value;
+    renderGrid();
+});
 
 window.addEventListener('pageshow', function (event) {
     if (event.persisted) {
@@ -295,43 +80,24 @@ window.addEventListener('pageshow', function (event) {
     }
 });
 
-function hotkey(event) {
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
-    event.preventDefault();
-    closegame();
-  }
+function play(path) {
+    window.location.href = 'game.html?g=' + encodeURIComponent(path);
 }
 
-document.addEventListener('keydown', hotkey, true);
-gameframe.addEventListener('load', () => {
-  try {
-    gameframe.contentWindow.addEventListener('keydown', hotkey, true);
-  } catch (e) {}
-});
-
-function closegame() {
-    window.gameOpen = false
-    gameframe.style.opacity = "0";
-    setTimeout(()=>{
-        gameframe.src = "";
-        gameframe.style.opacity = "1";
-        gameframe.style.display = "none";
-        window.requestAnimationFrame(() => {
-            cover.style.opacity = "0";
-            music.play();
-            setTimeout(()=>{
-                cover.style.display = "none";
-            }, 1000)
-        });
-    }, 100)
-}
 
 function theo() {
-    music.pause();
+    if (document.getElementById("theo-overlay")) return;
+
+    let overlay = document.createElement("div");
+    overlay.id = "theo-overlay";
     let theoimg = document.createElement("img");
     theoimg.src = "media/theo.png";
-    theoimg.style = "position: absolute; width: 100%; height:100%"
-    document.body.appendChild(theoimg);
+    theoimg.draggable = false;
+    overlay.appendChild(theoimg);
+    document.body.appendChild(overlay);
+    document.body.classList.add("theo-open");
+    window.gameOpen = true;
+
     let coonshi = document.createElement("audio");
     coonshi.src = "media/coonshi.mp3";
     coonshi.loop = true;

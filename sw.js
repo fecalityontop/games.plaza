@@ -61,6 +61,11 @@ function copyInit(req) {
                    'referrer', 'referrerPolicy', 'integrity', 'keepalive', 'signal']) {
     if (req[k] !== undefined) init[k] = req[k];
   }
+  // `only-if-cached` is only valid with mode "same-origin", and RequestInit
+  // cannot copy a navigation request's mode. We intentionally cache-bust with
+  // `_v` anyway, so an only-if-cached probe would always miss; drop the cache
+  // mode so the Request constructor doesn't throw.
+  if (init.cache === "only-if-cached") delete init.cache;
   return init;
 }
 

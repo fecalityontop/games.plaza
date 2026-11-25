@@ -3,16 +3,3 @@
 *.log
 .vscode/
 .wrangler/
-
-# Source package for GTA IV - not served by the site. Its original 7.8 GB ISO
-# and 66 MB wasm exceed Cloudflare's per-asset size limit; the playable copy
-# lives in games/gta4/ with both files split into .partNNN chunks.
-gta4-web-v0.1.8/
-
-# Raw per-file vcsky source dumps. The WASM still streams individual
-# audio/model files from these URLs, so they are packed into the range-
-# addressable split parts in games/gta/vc/vcsky/packs/ (see pack-vcsky.js
-# and handleVcsky in sw.js). Excluding the originals keeps the deploy far
-# below Cloudflare's 20,000-asset limit.
-games/gta/vc/vcsky/fetched/
-games/gta/vc/vcsky/fetched-ru/

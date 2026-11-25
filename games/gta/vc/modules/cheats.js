@@ -1143,9 +1143,8 @@
         const view = getView();
         const bufLen = view.buffer.byteLength;
         
-        // Detect language and get money handle address
-        const isRu = typeof currentLanguage !== 'undefined' && currentLanguage === 'ru';
-        const moneyHandleAddr = isRu ? 0x361c60 : 0x361c50;
+        // English-only build: money handle address for the English data files
+        const moneyHandleAddr = 0x361c50;
         
         if (moneyHandleAddr >= bufLen - 4) return null;
         

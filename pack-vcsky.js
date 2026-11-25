@@ -1,7 +1,7 @@
 // Pack the 31k individual vcsky asset files into ~22 MiB parts plus a
 // path -> byte-range manifest. The service worker serves each original URL
-// straight out of the pack, so Cloudflare only sees ~60 assets instead of
-// 31k (free-plan limit is 20,000 files / 25 MiB per file).
+// straight out of the pack, so Cloudflare only sees ~30 assets instead of
+// 31k (free-plan limit is 20,000 files / 25 MiB per file). English only.
 //
 //   node pack-vcsky.js            # gzip files where it actually shrinks them
 //   node pack-vcsky.js --raw      # skip compression entirely
@@ -20,7 +20,6 @@ const ROOT = path.join(__dirname, 'games/gta/vc/vcsky');
 const PACKS = path.join(ROOT, 'packs');
 const SOURCES = [
   { lang: 'en', dir: path.join(ROOT, 'fetched'), prefix: '/vcsky/fetched/' },
-  { lang: 'ru', dir: path.join(ROOT, 'fetched-ru'), prefix: '/vcsky/fetched-ru/' },
 ];
 
 const pad = (n) => String(n).padStart(3, '0');

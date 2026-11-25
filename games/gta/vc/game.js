@@ -49,48 +49,16 @@ const translations = {
         downloading: "Downloading",
         clickToContinue: "Click to continue...",
         portBy: "HTML5 port by:",
-        ruTranslate: "",
         demoOffDisclaimer: "Due to the unexpectedly high popularity of the project, resulting in significant traffic costs, and in order to avoid any risk of the project being shut down due to rights holder claims, we have disabled the demo version. You can still run the full version by providing the original game resources.",
-        configLanguage: "Language:",
         configCheats: "Cheats (F3)",
         configFullscreen: "Fullscreen",
         configMaxFps: "Max FPS:",
         configUnlimited: "(0 = unlimited)",
     },
-    ru: {
-        clickToPlayDemo: "Играть в демо версию",
-        clickToPlayFull: "Играть",
-        playDemoText: "Вы можете играть в демо версию, или предоставить оригинальные файлы игры для полной версии.",
-        disclaimer: "ОТКАЗ ОТ ОТВЕТСТВЕННОСТИ:",
-        disclaimerSources: "Эта игра основана на открытой версии GTA: Vice City. Она не является коммерческим изданием и не связана с Rockstar Games.",
-        disclaimerCheckbox: "Я владею оригинальной игрой",
-        disclaimerPrompt: "Вам потребуется приложить какой-либо файл из оригинальной игры для подтверждения владения оригинальной игрой.",
-        cantContinuePlaying: "Вы не можете продолжить игру в демо версии. Пожалуйста, предоставьте оригинальные файлы игры для продолжения игры.",
-        demoAlert: "Демо версия предназначена только для ознакомления с технологией игры. Все функции доступны, но вы не сможете продолжить игру по сюжету. Пожалуйста, предоставьте оригинальные файлы игры для запуска полной версии.",
-        downloading: "Загрузка",
-        clickToContinue: "Нажмите для продолжения...",
-        portBy: "Авторы HTML5 порта:",
-        ruTranslate: `
-<div class="translated-by">
-    <span>Переведено на русский студией</span>
-    <a href="https://www.gamesvoice.ru/" target="_blank">GamesVoice</a>
-</div>
-`,
-        demoOffDisclaimer: "В связи с неожиданно высокой популярностью проекта, как следствие — значительными расходами на трафик, а также во избежание рисков закрытия проекта из-за претензий правообладателей, мы отключили возможность запуска демо-версии. При этом вы по-прежнему можете запустить полную версию, предоставив оригинальные ресурсы.",
-        configLanguage: "Язык:",
-        configCheats: "Читы (F3)",
-        configFullscreen: "Полный экран",
-        configMaxFps: "Макс. FPS:",
-        configUnlimited: "(0 = без ограничений)",
-    },
 };
 
-var currentLanguage = navigator.language.split("-")[0] === "ru" ? "ru" : "en";
-if (params.get("lang") === "ru") {
-    currentLanguage = "ru";
-} else if (params.get("lang") === "en") {
-    currentLanguage = "en";
-}
+// English-only build: ignore browser locale and any ?lang= override.
+const currentLanguage = "en";
 
 window.t = function (key) {
     return translations[currentLanguage][key];
@@ -123,18 +91,7 @@ function updateAllTranslations() {
     const portBy = document.getElementById('port-by');
     if (portBy) portBy.textContent = t('portBy');
     
-    // Update developed-by section for ruTranslate
-    const developedBy = document.querySelector('.developed-by');
-    const existingTranslatedBy = developedBy?.querySelector('.translated-by');
-    if (existingTranslatedBy) existingTranslatedBy.remove();
-    if (developedBy && t('ruTranslate')) {
-        developedBy.insertAdjacentHTML('beforeend', t('ruTranslate'));
-    }
-    
     // Update config panel labels if present
-    const configLangLabel = document.getElementById('config-lang-label');
-    if (configLangLabel) configLangLabel.textContent = t('configLanguage');
-    
     const configCheatsLabel = document.getElementById('config-cheats-label');
     if (configCheatsLabel) configCheatsLabel.textContent = t('configCheats');
     
@@ -149,18 +106,13 @@ function updateAllTranslations() {
 }
 
 // Function to update game data files based on language
-function updateGameDataForLanguage(lang) {
-    if (lang === 'ru') {
-        data_content = `${replaceBR}vc-sky-ru-v6.data`;
-        wasm_content = `${replaceBR}vc-sky-ru-v6.wasm`;
-    } else {
-        data_content = `${replaceBR}vc-sky-en-v6.data`;
-        wasm_content = `${replaceBR}vc-sky-en-v6.wasm`;
-    }
+function updateGameDataForLanguage() {
+    data_content = `${replaceBR}vc-sky-en-v6.data`;
+    wasm_content = `${replaceBR}vc-sky-en-v6.wasm`;
 }
 
-// Initialize data files based on current language
-updateGameDataForLanguage(currentLanguage);
+// English-only build: always use the English data bundle.
+updateGameDataForLanguage();
 
 async function loadData() {
     let cache;
@@ -497,8 +449,6 @@ const disclaimerCheckboxLabel = document.getElementById('disclaimer-checkbox-lab
 disclaimerCheckboxLabel.textContent = t('disclaimerCheckbox');
 const disclaimerCheckbox = document.getElementById('disclaimer-checkbox');
 const originalGameFile = document.getElementById('original-game-file');
-const developedBy = document.querySelector('.developed-by');
-developedBy.innerHTML += t('ruTranslate');
 const portBy = document.getElementById('port-by');
 portBy.textContent = t('portBy');
 
@@ -699,7 +649,6 @@ const revc_ini = (() => {
 // Configurable mode UI
 if (configurableMode) {
     const configPanel = document.getElementById('config-panel');
-    const configLang = document.getElementById('config-lang');
     const configCheats = document.getElementById('config-cheats');
     const configFullscreen = document.getElementById('config-fullscreen');
     const configMaxFps = document.getElementById('config-max-fps');
@@ -709,22 +658,12 @@ if (configurableMode) {
         configPanel.style.display = 'block';
         
         // Set initial values from URL params
-        if (configLang) configLang.value = currentLanguage;
         configCheats.checked = cheatsEnabled;
         configFullscreen.checked = autoFullScreen;
         configMaxFps.value = maxFPS;
         
         // Update config panel labels with current language
         updateAllTranslations();
-        
-        // Language selector handler
-        if (configLang) {
-            configLang.addEventListener('change', (e) => {
-                currentLanguage = e.target.value;
-                updateGameDataForLanguage(currentLanguage);
-                updateAllTranslations();
-            });
-        }
         
         // Update settings when changed
         configCheats.addEventListener('change', (e) => {

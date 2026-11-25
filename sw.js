@@ -91,8 +91,7 @@ function isGta(url) {
 
 function isVcskyFetched(url) {
   const p = url.pathname;
-  return ["/vcsky/fetched/", "/vcsky/fetched-ru/",
-    VCSKY_MOUNT + "/fetched/", VCSKY_MOUNT + "/fetched-ru/"]
+  return ["/vcsky/fetched/", VCSKY_MOUNT + "/fetched/"]
     .some((prefix) => p.startsWith(prefix));
 }
 
@@ -252,20 +251,20 @@ async function handle(req, url) {
 
 // ---------- GTA VC: vcsky/fetched packed into range-addressable parts ----------
 
-function vcskyPartUrl(lang, index) {
-  return new URL(`${VCSKY_PACK_BASE}${lang}/part${String(index + 1).padStart(3, "0")}.bin`, self.location.href).href;
+function vcskyPartUrl(index) {
+  return new URL(`${VCSKY_PACK_BASE}en/part${String(index + 1).padStart(3, "0")}.bin`, self.location.href).href;
 }
 
 // An entry is [packOffset, storedLength, rawLength, encoding]. The pack is
 // split into CHUNK-sized files, so an entry can straddle two parts. Static
 // assets ignore Range headers; fetch the (at most two) small parts and slice.
-async function vcskyStoredBytes(manifest, lang, entry) {
+async function vcskyStoredBytes(manifest, entry) {
   const [offset, storedLength] = entry;
   const first = Math.floor(offset / manifest.chunkSize);
   const last = Math.floor((offset + storedLength - 1) / manifest.chunkSize);
   const chunks = [];
   for (let i = first; i <= last; i++) {
-    const u = new URL(vcskyPartUrl(lang, i));
+    const u = new URL(vcskyPartUrl(i));
     u.searchParams.set("_v", cacheVersion());
     const res = await fetch(u, { cache: "no-store" });
     if (!res.ok) throw new Error(`Pack part ${i + 1} failed: ${res.status}`);
@@ -288,8 +287,7 @@ async function gunzip(data) {
 
 async function handleVcsky(req, url) {
   const key = vcskyManifestKey(url.pathname);
-  const lang = key.startsWith("/vcsky/fetched-ru/") ? "ru" : "en";
-  const manifest = await vcskyManifest(lang);
+  const manifest = await vcskyManifest();
   if (!manifest) return withCOI(new Response(null, { status: 404 }), url);
   const entry = manifest.entries[key];
   if (!entry) return withCOI(new Response(null, { status: 404 }), url);
@@ -314,7 +312,7 @@ async function handleVcsky(req, url) {
 
   const start = range === "full" ? 0 : range.start;
   const end = range === "full" ? total - 1 : range.end;
-  const stored = await vcskyStoredBytes(manifest, lang, entry);
+  const stored = await vcskyStoredBytes(manifest, entry);
   const raw = encoding === "gzip" ? await gunzip(stored) : stored;
   return withCOI(new Response(raw.slice(start, end + 1), {
     status: range === "full" ? 200 : 206,
@@ -343,8 +341,8 @@ async function gtaManifest(internalUrl) {
   return manifest;
 }
 
-async function vcskyManifest(lang) {
-  const p = VCSKY_PACK_BASE + lang + "/manifest.json";
+async function vcskyManifest() {
+  const p = VCSKY_PACK_BASE + "en/manifest.json";
   if (vcskyManifests.has(p)) return vcskyManifests.get(p);
   try {
     const u = new URL(p, self.location.href);

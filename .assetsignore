@@ -8,3 +8,10 @@
 # and 66 MB wasm exceed Cloudflare's per-asset size limit; the playable copy
 # lives in games/gta4/ with both files split into .partNNN chunks.
 gta4-web-v0.1.8/
+
+# Raw per-file source dumps used to build the vc-sky-en/ru v6 data packages.
+# The site serves the prebuilt, split packages from games/gta/vc/vcbr/ instead
+# (game.js loads /vcbr/vc-sky-*-v6.data and the service worker rejoins parts),
+# so these are never requested at runtime (~31k files, ~1.5 GB of deploy).
+games/gta/vc/vcsky/fetched/
+games/gta/vc/vcsky/fetched-ru/

@@ -38,8 +38,8 @@ async function combineFiles(partPath) {
     process.exit(1);
   }
 
-  // Stream each part into the output: the GTA IV disc is ~7.8 GB, so reading
-  // it all into a Buffer would exhaust memory.
+  // Stream each part into the output: large assets can exceed available
+  // memory, so never join them into a single Buffer.
   const output = createWriteStream(originalFilePath);
   for (const part of parts) {
     console.log(` - Found: ${path.basename(part)}`);

@@ -8,8 +8,8 @@ const MB = 1024 * 1024;
 
 function pad(n) { return String(n).padStart(3, '0'); }
 
-// Streams a file into fixed-size parts so even the 7.8 GB disc image works
-// without loading it all into memory. Every part is < the 25 MiB asset limit.
+// Streams a file into fixed-size parts so large assets work without loading
+// them all into memory. Every part is < the 25 MiB asset limit.
 async function splitFile(filePath, numParts, { manifest = false } = {}) {
   try {
     await access(filePath);

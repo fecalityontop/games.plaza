@@ -1,29 +1,40 @@
 const ENCODING = "auto";
 const MAX_PARTS = 30;
-const GTA_MOUNT = "/games/gta4";
-// The WASM/hub use root-absolute paths; the files live under the mount.
-const GTA_ALIASES = ["/iso/", "/app0/"];
-// Worker.js handles these directly, so the SW must pass them through.
-const GTA_PASSTHROUGH = ["/host/", "/upload/"];
 // Only these files are split. Probing a manifest for every shader/font
 // would add a wasted 404 round trip per asset (the game loads 1000+ wgsl).
-const GTA_SPLIT_SUFFIXES = [".wasm", ".iso", ".data", ".bin"];
-const SPLIT_SUFFIXES = [...GTA_SPLIT_SUFFIXES, ".unityweb"];
+const SPLIT_SUFFIXES = [".wasm", ".data", ".bin", ".unityweb"];
 // Instead of deploying 31k individual vcsky files (over Cloudflare's
 // 20k-asset limit) they live in offset-addressed packs too. The manifest
 // maps each original URL to a byte range in one of the split pack parts.
 const VCSKY_MOUNT = "/games/gta/vc/vcsky";
 const VCSKY_PACK_BASE = VCSKY_MOUNT + "/packs/";
+// Never append `_v` to these navigation URLs. Cloudflare redirects the
+// explicit index.html paths to their clean equivalents, so cover both forms.
+const NO_CACHE_BUST = new Set([
+  "/",
+  "/index.html",
+  "/game/",
+  "/game/index.html",
+  "/settings",
+  "/settings/",
+  "/settings/index.html",
+]);
 // Cache-busting bucket: rotate every hour so stale cached responses
 // (browser HTTP cache + any Cache API entries) are abandoned and refetched.
 const CACHE_BUCKET_MS = 60 * 60 * 1000;
 // Bump when deployed files change so clients refetch even in the same hour bucket.
-const CACHE_EPOCH = "20261125a";
+const CACHE_EPOCH = "20261125c";
 function cacheBucket() { return Math.floor(Date.now() / CACHE_BUCKET_MS); }
 function cacheVersion() { return CACHE_EPOCH + "-" + cacheBucket(); }
 
-const gtaManifests = new Map();
 const vcskyManifests = new Map();
+
+// Pack parts are ~22 MiB each. Keep a small LRU so touching many assets in
+// the same part doesn't re-download it for every single file, and dedupe
+// concurrent requests for a part that isn't cached yet.
+const VCSKY_PART_CACHE_LIMIT = 4;
+const vcskyPartBuffers = new Map();
+const vcskyPartPending = new Map();
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil((async () => {
@@ -41,24 +52,14 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
   if (req.method !== "GET" && req.method !== "HEAD") return;
   if (url.pathname.includes(".part")) return; // part files are fetched by the handlers
-  // Never cache-bust navigation requests: the rewritten URL can leak `_v`
-  // into `window.location.search`, which the WASM build reads as game args.
-  // Subresources below still get a versioned URL.
-  if (req.mode === "navigate") {
+  if (NO_CACHE_BUST.has(url.pathname)) {
     event.respondWith(handle(req, url));
     return;
   }
-  if (GTA_PASSTHROUGH.some((p) => url.pathname.startsWith(p))) return;
   if (isVcskyFetched(url)) {
     event.respondWith(handleVcsky(req, url));
     return;
   }
-  if (isGta(url)) {
-    event.respondWith(handleGta(req, url));
-    return;
-  }
-  // Eaglercraft 26.3 (Horizon) shares memory across threads: it needs
-  // COEP "require-corp" instead of the site's usual "credentialless".
   // Bust the browser HTTP cache by versioning the URL with the current hour bucket.
   // New bucket => new URL => cache miss => fresh fetch, while old entries go stale.
   const busted = new URL(url.href);
@@ -77,16 +78,10 @@ function copyInit(req) {
     if (req[k] !== undefined) init[k] = req[k];
   }
   // `only-if-cached` is only valid with mode "same-origin", and RequestInit
-  // cannot copy a navigation request's mode. We intentionally cache-bust with
-  // `_v` anyway, so an only-if-cached probe would always miss; drop the cache
-  // mode so the Request constructor doesn't throw.
+  // cannot copy a navigation request's mode. Versioned navigations would
+  // always miss that cache mode anyway, so drop it to avoid a constructor error.
   if (init.cache === "only-if-cached") delete init.cache;
   return init;
-}
-
-function isGta(url) {
-  const p = url.pathname;
-  return p === GTA_MOUNT || p.startsWith(GTA_MOUNT + "/") || GTA_ALIASES.some((a) => p.startsWith(a));
 }
 
 function isVcskyFetched(url) {
@@ -103,28 +98,17 @@ function vcskyManifestKey(pathname) {
     : pathname;
 }
 
-// /iso/gta4.iso -> /games/gta4/iso/gta4.iso (where split.js wrote the parts)
-function gtaInternalUrl(url) {
-  const u = new URL(url.href);
-  u.search = "";
-  for (const alias of GTA_ALIASES) {
-    if (u.pathname.startsWith(alias)) {
-      u.pathname = GTA_MOUNT + alias + u.pathname.slice(alias.length);
-      break;
-    }
-  }
-  return u;
-}
-
 function withCOI(res, url) {
   if (!res || res.status === 0) return res;
-  const gamePath = !!url && (url.pathname === "/games/eagler/26.3" ||
-    url.pathname.startsWith("/games/eagler/26.3/") || isGta(url));
-  const coep = gamePath ? "require-corp" : "credentialless";
+  // Eaglercraft 26.3 (Horizon) shares memory across threads and needs the
+  // stricter policy; the rest of the site uses "credentialless".
+  const strict = !!url && (url.pathname === "/games/eagler/26.3" ||
+    url.pathname.startsWith("/games/eagler/26.3/"));
+  const coep = strict ? "require-corp" : "credentialless";
   const headers = new Headers(res.headers);
   headers.set("Cross-Origin-Opener-Policy", "same-origin");
   headers.set("Cross-Origin-Embedder-Policy", coep);
-  if (gamePath) headers.set("Cross-Origin-Resource-Policy", "same-origin");
+  if (strict) headers.set("Cross-Origin-Resource-Policy", "same-origin");
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
 }
 
@@ -255,20 +239,56 @@ function vcskyPartUrl(index) {
   return new URL(`${VCSKY_PACK_BASE}en/part${String(index + 1).padStart(3, "0")}.bin`, self.location.href).href;
 }
 
+// Fetch a pack part once per SW lifetime (with a bounded LRU), and share the
+// same in-flight promise when many assets in one part are requested at once.
+// No `no-store`: static assets support ETags, so later SW restarts can
+// revalidate instead of pulling 22 MiB again.
+function vcskyPart(index) {
+  const hit = vcskyPartBuffers.get(index);
+  if (hit) {
+    vcskyPartBuffers.delete(index);
+    vcskyPartBuffers.set(index, hit); // refresh LRU order
+    return Promise.resolve(hit);
+  }
+
+  const pending = vcskyPartPending.get(index);
+  if (pending) return pending;
+
+  const promise = (async () => {
+    const u = new URL(vcskyPartUrl(index));
+    u.searchParams.set("_v", cacheVersion());
+    const res = await fetch(u);
+    if (!res.ok) throw new Error(`Pack part ${index + 1} failed: ${res.status}`);
+    const buf = await res.arrayBuffer();
+    vcskyPartBuffers.set(index, buf);
+    while (vcskyPartBuffers.size > VCSKY_PART_CACHE_LIMIT) {
+      vcskyPartBuffers.delete(vcskyPartBuffers.keys().next().value);
+    }
+    return buf;
+  })();
+
+  vcskyPartPending.set(index, promise);
+  const done = () => {
+    if (vcskyPartPending.get(index) === promise) vcskyPartPending.delete(index);
+  };
+  promise.then(done, done);
+  return promise;
+}
+
 // An entry is [packOffset, storedLength, rawLength, encoding]. The pack is
 // split into CHUNK-sized files, so an entry can straddle two parts. Static
-// assets ignore Range headers; fetch the (at most two) small parts and slice.
+// assets ignore Range headers; slice the cached part buffer(s) instead.
 async function vcskyStoredBytes(manifest, entry) {
   const [offset, storedLength] = entry;
   const first = Math.floor(offset / manifest.chunkSize);
   const last = Math.floor((offset + storedLength - 1) / manifest.chunkSize);
+  const indices = [];
+  for (let i = first; i <= last; i++) indices.push(i);
+  const buffers = await Promise.all(indices.map(vcskyPart));
   const chunks = [];
-  for (let i = first; i <= last; i++) {
-    const u = new URL(vcskyPartUrl(i));
-    u.searchParams.set("_v", cacheVersion());
-    const res = await fetch(u, { cache: "no-store" });
-    if (!res.ok) throw new Error(`Pack part ${i + 1} failed: ${res.status}`);
-    const part = new Uint8Array(await res.arrayBuffer());
+  for (let n = 0; n < indices.length; n++) {
+    const i = indices[n];
+    const part = new Uint8Array(buffers[n]);
     const from = i === first ? offset - i * manifest.chunkSize : 0;
     const to = i === last ? offset + storedLength - i * manifest.chunkSize : part.byteLength;
     chunks.push(part.subarray(from, to));
@@ -286,6 +306,19 @@ async function gunzip(data) {
 }
 
 async function handleVcsky(req, url) {
+  try {
+    return await handleVcskyInner(req, url);
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error);
+    console.error(`[vcsky] ${url.pathname}: ${message}`);
+    return withCOI(new Response(`vcsky asset unavailable: ${message}`, {
+      status: 502,
+      headers: { "Content-Type": "text/plain", "Cache-Control": "no-store" },
+    }), url);
+  }
+}
+
+async function handleVcskyInner(req, url) {
   const key = vcskyManifestKey(url.pathname);
   const manifest = await vcskyManifest();
   if (!manifest) return withCOI(new Response(null, { status: 404 }), url);
@@ -329,25 +362,13 @@ function contentTypeFor(path) {
   return "application/octet-stream";
 }
 
-// ---------- GTA IV: split-asset reassembly with real byte-range support ----------
-
-async function gtaManifest(internalUrl) {
-  const key = internalUrl.pathname;
-  if (gtaManifests.has(key)) return gtaManifests.get(key);
-  const res = await fetch(new URL(`${key}.manifest.json`, internalUrl.origin));
-  if (!res.ok) return null;
-  const manifest = await res.json();
-  gtaManifests.set(key, manifest);
-  return manifest;
-}
-
 async function vcskyManifest() {
   const p = VCSKY_PACK_BASE + "en/manifest.json";
   if (vcskyManifests.has(p)) return vcskyManifests.get(p);
   try {
     const u = new URL(p, self.location.href);
     u.searchParams.set("_v", cacheVersion());
-    const res = await fetch(u, { cache: "no-store" });
+    const res = await fetch(u);
     if (!res.ok) return null;
     const manifest = await res.json();
     vcskyManifests.set(p, manifest);
@@ -371,135 +392,4 @@ function parseRange(header, total) {
   end = Math.min(end, total - 1);
   if (start > end || start >= total) return null;
   return { start, end };
-}
-
-function gtaPartUrl(internalUrl, index) {
-  return new URL(`${internalUrl.pathname}.part${String(index + 1).padStart(3, "0")}`, internalUrl.origin).href;
-}
-
-// Streams [start, end] out of the split parts. Cloudflare static assets
-// ignore Range headers, so fetch a part once and discard the leading bytes
-// instead of buffering a whole 24 MB part for every 4 MB read the game makes.
-function gtaRangeStream(internalUrl, manifest, start, end) {
-  let partIndex = Math.floor(start / manifest.chunkSize);
-  let offset = start - partIndex * manifest.chunkSize;
-  let remaining = end - start + 1;
-  let need = 0;
-  let skipping = 0;
-  let reader = null;
-
-  return new ReadableStream({
-    async pull(controller) {
-      try {
-        while (remaining > 0) {
-          if (!reader) {
-            if (partIndex >= manifest.partCount) {
-              controller.close();
-              return;
-            }
-            need = Math.min(remaining, manifest.sizes[partIndex] - offset);
-            if (need <= 0) {
-              partIndex += 1;
-              offset = 0;
-              continue;
-            }
-            const res = await fetch(gtaPartUrl(internalUrl, partIndex));
-            if (!res.ok || !res.body) throw new Error(`Part ${partIndex + 1} failed: ${res.status}`);
-            reader = res.body.getReader();
-            skipping = offset;
-          }
-
-          let { done, value } = await reader.read();
-          if (done) {
-            await reader.cancel().catch(() => {});
-            reader = null;
-            if (need > 0) throw new Error(`Part ${partIndex + 1} ended early`);
-            partIndex += 1;
-            offset = 0;
-            continue;
-          }
-          if (skipping > 0) {
-            const drop = Math.min(skipping, value.byteLength);
-            skipping -= drop;
-            if (value.byteLength <= drop) continue;
-            value = value.slice(drop);
-          }
-          if (value.byteLength <= need) {
-            controller.enqueue(value);
-            remaining -= value.byteLength;
-            need -= value.byteLength;
-          } else {
-            controller.enqueue(value.slice(0, need));
-            remaining -= need;
-            need = 0;
-          }
-          if (need === 0) {
-            await reader.cancel().catch(() => {});
-            reader = null;
-            partIndex += 1;
-            offset = 0;
-          }
-          return;
-        }
-        controller.close();
-      } catch (error) {
-        controller.error(error);
-      }
-    },
-    cancel() {
-      return reader ? reader.cancel() : undefined;
-    },
-  });
-}
-
-async function handleGta(req, url) {
-  if (url.pathname === GTA_MOUNT) {
-    const redirect = new Response(null, { status: 302, headers: { Location: `${GTA_MOUNT}/` } });
-    return withCOI(redirect, url);
-  }
-
-  const internal = gtaInternalUrl(url);
-  const manifest = GTA_SPLIT_SUFFIXES.some((s) => internal.pathname.endsWith(s))
-    ? await gtaManifest(internal)
-    : null;
-
-  if (!manifest) {
-    // Ordinary site files (index.html, js, hub art, tu8, aes_key, ...).
-    // No cache-busting: let the browser's HTTP cache and ETags do their job.
-    return withCOI(await fetch(new Request(internal.href, copyInit(req))), url);
-  }
-
-  const rangeHeader = req.headers.get("Range");
-  const range = rangeHeader ? parseRange(rangeHeader, manifest.total) : "full";
-  if (range === null) {
-    const headers = new Headers({ "Content-Range": `bytes */${manifest.total}` });
-    return withCOI(new Response(null, { status: 416, headers }), url);
-  }
-
-  const headers = new Headers();
-  headers.set("Content-Type", internal.pathname.endsWith(".wasm") ? "application/wasm" : "application/octet-stream");
-  headers.set("Accept-Ranges", "bytes");
-  headers.set("Cache-Control", "no-cache");
-  headers.set("X-Uncompressed-Length", String(manifest.total));
-  if (range === "full") {
-    headers.set("Content-Length", String(manifest.total));
-  } else {
-    headers.set("Content-Range", `bytes ${range.start}-${range.end}/${manifest.total}`);
-    headers.set("Content-Length", String(range.end - range.start + 1));
-  }
-
-  if (req.method === "HEAD") {
-    return withCOI(new Response(null, { status: range === "full" ? 200 : 206, headers }), url);
-  }
-
-  const slice = range === "full"
-    ? { start: 0, end: manifest.total - 1 }
-    : range;
-  return withCOI(
-    new Response(gtaRangeStream(internal, manifest, slice.start, slice.end), {
-      status: range === "full" ? 200 : 206,
-      headers,
-    }),
-    url
-  );
 }

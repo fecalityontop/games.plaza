@@ -6,6 +6,6 @@ main = "./worker.js"
 directory = "./"           # Or "./dist" depending on where your build output goes
 binding = "ASSETS"        # This explicitly tells Cloudflare to create the env.ASSETS binding
 # Run worker.js first for EVERY request. Without this, existing static files are
-# served directly and skip the COOP/COEP headers GTA IV (and Eagler) need for
+# served directly and skip the COOP/COEP headers Eagler needs for
 # SharedArrayBuffer/WebAssembly threads. worker.js calls env.ASSETS.fetch itself.
 run_worker_first = ["/*"]

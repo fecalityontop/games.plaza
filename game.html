@@ -40,7 +40,7 @@
 
     // The worker now sends COOP/COEP itself, so crossOriginIsolated is true
     // even before a service worker controls the page. Check the controller,
-    // not isolation, or /games/gta4's split assets are never reassembled.
+    // not isolation, or split assets are never reassembled.
     if (!("serviceWorker" in navigator)) return;
     if (navigator.serviceWorker.controller) { clearFlag(); return; }
     try {

@@ -482,7 +482,8 @@ var ASM_CONSTS = {
   },
   990779: ($0) => {
     if (!AL.currentCtx) {
-      err("alGetProcAddress() called without a valid context");
+      // Expected probe before the audio context exists; logging it every
+      // frame floods the console. Keep the same error return value.
       return 1;
     }
     if (!$0) {

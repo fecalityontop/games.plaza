@@ -1,4 +1,3 @@
-const cloudSavesStatus = document.getElementById('cloud-saves-status');
 var statusElement = document.getElementById("status");
 var progressElement = document.getElementById("progress");
 var spinnerElement = document.getElementById('spinner');
@@ -8,8 +7,13 @@ var wasm_content;
 const params = new URLSearchParams(window.location.search);
 
 // Base URLs
-const replaceFetch = (str) => str.replace("https://cdn.dos.zone/vcsky/", "/vcsky/")
-const replaceBR = "/vcbr/"
+// Streamed assets are restored inside this game folder, not at the site root.
+// The service worker serves both these paths and legacy /vcsky/fetched* paths
+// out of the packed asset parts.
+const replaceFetch = (str) => str.replace("https://cdn.dos.zone/vcsky/", "/games/gta/vc/vcsky/")
+// The bundles live inside the game folder, not at the site root. The service
+// worker's 404 -> .partNNN fallback rejoins the split .data files from here.
+const replaceBR = "/games/gta/vc/vcbr/"
 
 // Configurable mode - show settings UI before play
 const configurableMode = params.get('configurable') === "1";
@@ -35,11 +39,6 @@ const translations = {
     en: {
         clickToPlayDemo: "Click to play demo",
         clickToPlayFull: "Click to play",
-        invalidKey: "invalid key",
-        checking: "checking...",
-        cloudSaves: "Cloud saves:",
-        enabled: "enabled",
-        disabled: "disabled",
         playDemoText: "You can play the DEMO version, or provide the original game files to play the full version.",
         disclaimer: "DISCLAIMER:",
         disclaimerSources: "This game is based on an open source version of GTA: Vice City. It is not a commercial release and is not affiliated with Rockstar Games.",
@@ -48,9 +47,7 @@ const translations = {
         cantContinuePlaying: "You can't continue playing in DEMO version. Please provide the original game files to continue playing.",
         demoAlert: "The demo version is intended only for familiarizing yourself with the game technology. All features are available, but you won't be able to progress through the game's storyline. Please provide the original game files to launch the full version.",
         downloading: "Downloading",
-        enterKey: "enter your key",
         clickToContinue: "Click to continue...",
-        enterJsDosKey: "Enter js-dos key (5 len)",
         portBy: "HTML5 port by:",
         ruTranslate: "",
         demoOffDisclaimer: "Due to the unexpectedly high popularity of the project, resulting in significant traffic costs, and in order to avoid any risk of the project being shut down due to rights holder claims, we have disabled the demo version. You can still run the full version by providing the original game resources.",
@@ -63,11 +60,6 @@ const translations = {
     ru: {
         clickToPlayDemo: "Играть в демо версию",
         clickToPlayFull: "Играть",
-        invalidKey: "неверный ключ",
-        checking: "проверка...",
-        cloudSaves: "Облачные сохранения:",
-        enabled: "включены",
-        disabled: "выключены",
         playDemoText: "Вы можете играть в демо версию, или предоставить оригинальные файлы игры для полной версии.",
         disclaimer: "ОТКАЗ ОТ ОТВЕТСТВЕННОСТИ:",
         disclaimerSources: "Эта игра основана на открытой версии GTA: Vice City. Она не является коммерческим изданием и не связана с Rockstar Games.",
@@ -76,9 +68,7 @@ const translations = {
         cantContinuePlaying: "Вы не можете продолжить игру в демо версии. Пожалуйста, предоставьте оригинальные файлы игры для продолжения игры.",
         demoAlert: "Демо версия предназначена только для ознакомления с технологией игры. Все функции доступны, но вы не сможете продолжить игру по сюжету. Пожалуйста, предоставьте оригинальные файлы игры для запуска полной версии.",
         downloading: "Загрузка",
-        enterKey: "введите ваш ключ",
         clickToContinue: "Нажмите для продолжения...",
-        enterJsDosKey: "Введите ключ js-dos (5 букв)",
         portBy: "Авторы HTML5 порта:",
         ruTranslate: `
 <div class="translated-by">
@@ -108,9 +98,6 @@ window.t = function (key) {
 
 // Function to update all translated texts on the page
 function updateAllTranslations() {
-    const keyInput = document.querySelector('.jsdos-key-input');
-    if (keyInput) keyInput.setAttribute('placeholder', t("enterJsDosKey"));
-    
     const clickToPlayButton = document.getElementById('click-to-play-button');
     if (clickToPlayButton) {
         clickToPlayButton.textContent = haveOriginalGame ? t('clickToPlayFull') : t('clickToPlayDemo');
@@ -120,12 +107,6 @@ function updateAllTranslations() {
     if (demoOffDisclaimer) {
         demoOffDisclaimer.textContent = haveOriginalGame ? "" : "* " + t('demoOffDisclaimer');
     }
-    
-    const cloudSavesLink = document.getElementById('cloud-saves-link');
-    if (cloudSavesLink) cloudSavesLink.textContent = t('cloudSaves');
-    
-    const cloudSavesStatus = document.getElementById('cloud-saves-status');
-    if (cloudSavesStatus) cloudSavesStatus.textContent = t('enterKey');
     
     const playDemoText = document.getElementById('play-demo-text');
     if (playDemoText) playDemoText.textContent = t('playDemoText');
@@ -495,97 +476,17 @@ clickToPlay.addEventListener('click', (e) => {
     }
 });
 
-const savesMountPoint = "/vc-assets/local/userfiles";
-const savesFile = "vcsky.saves";
-wrapIDBFS(console.log).addListener({
-    onLoad: (_, mount) => {
-        if (mount.mountpoint !== savesMountPoint) {
-            return null;
-        }
-        const token = localStorage.getItem('vcsky.key');
-        if (token && token.length === 5) {
-            const promise = CloudSDK.pullFromStorage(token, savesFile);
-            promise.then((payload) => {
-                console.log('[IDBFS] onLoad', token, payload ? payload.length / 1024 : 0, 'kb');
-            });
-            return promise;
-        }
-        return null;
-    },
-    onSave: (getData, _, mount) => {
-        if (mount.mountpoint !== savesMountPoint) {
-            return;
-        }
-        const token = localStorage.getItem('vcsky.key');
-        if (token && token.length === 5) {
-            getData().then((payload) => {
-                if (payload.length > 0) {
-                    console.log('[IDBFS] onSave', token, payload.length / 1024, 'kb');
-                    return CloudSDK.pushToStorage(token, savesFile, payload);
-                }
-            });
-        }
-    },
-});
+// Local saves stay in IndexedDB; no cloud listeners are registered.
+wrapIDBFS(console.log);
 
 
-function updateToken(token) {
-    cloudSavesStatus.textContent = t('checking');
-    if (token.length === 5) {
-        CloudSDK.resolveToken(token).then((profile) => {
-            if (profile) {
-                console.log('[CloudSdk] resolveToken', profile);
-                localStorage.setItem('vcsky.key', profile.token);
-                if (profile.premium) {
-                    keyStatus.textContent = t('enabled');
-                    keyStatus.style.color = 'green';
-                    keyStatus.style.fontWeight = 'bold';
-                } else {
-                    keyStatus.textContent = t('disabled');
-                    keyStatus.style.color = 'red';
-                    keyStatus.style.fontWeight = 'bold';
-                }
-            } else {
-                keyStatus.textContent = t('invalidKey');
-                keyStatus.style.color = 'white';
-                keyStatus.style.fontWeight = 'normal';
-            }
-        });
-    } else {
-        cloudSavesStatus.textContent = t('enterKey');
-    }
-}
-
-const keyInput = document.querySelector('.jsdos-key-input');
-keyInput.setAttribute('placeholder', t("enterJsDosKey"));
-const keyStatus = document.querySelector('.jsdos-key-status');
-keyInput.addEventListener('paste', (e) => {
-    setTimeout(() => {
-        updateToken(e.target.value);
-    }, 100);
-});
-
-keyInput.addEventListener('keyup', (e) => {
-    updateToken(e.target.value);
-});
-
-if (localStorage.getItem('vcsky.key')) {
-    keyInput.value = localStorage.getItem('vcsky.key');
-    updateToken(keyInput.value);
-} else {
-    keyStatus.textContent = t('invalidKey');
-    keyStatus.style.color = 'shite';
-    keyStatus.style.fontWeight = 'normal';
-}
+// Cloud-save UI and API calls removed; saves are local only.
 
 const clickToPlayButton = document.getElementById('click-to-play-button');
 clickToPlayButton.textContent = t('clickToPlayDemo');
 clickToPlayButton.classList.add('disabled');
 const demoOffDisclaimer = document.getElementById('demo-off-disclaimer');
 demoOffDisclaimer.textContent = "* " +t('demoOffDisclaimer');
-const cloudSavesLink = document.getElementById('cloud-saves-link');
-cloudSavesLink.textContent = t('cloudSaves');
-cloudSavesStatus.textContent = t('enterKey');
 const playDemoText = document.getElementById('play-demo-text');
 playDemoText.textContent = t('playDemoText');
 const disclaimerText = document.getElementById('disclaimer-text');

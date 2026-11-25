@@ -13,10 +13,13 @@ const VCSKY_PACK_BASE = VCSKY_MOUNT + "/packs/";
 const NO_CACHE_BUST = new Set([
   "/",
   "/index.html",
+  "/game", // Cloudflare redirects /game.html here, preserving the query
   "/game/",
+  "/game.html",
   "/game/index.html",
   "/settings",
   "/settings/",
+  "/settings.html",
   "/settings/index.html",
 ]);
 // Cache-busting bucket: rotate every hour so stale cached responses

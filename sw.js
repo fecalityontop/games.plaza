@@ -1,8 +1,4 @@
 const ENCODING = "auto";
-const MAX_PARTS = 30;
-// Only these files are split. Probing a manifest for every shader/font
-// would add a wasted 404 round trip per asset (the game loads 1000+ wgsl).
-const SPLIT_SUFFIXES = [".wasm", ".data", ".bin", ".unityweb"];
 // Instead of deploying 31k individual vcsky files (over Cloudflare's
 // 20k-asset limit) they live in offset-addressed packs too. The manifest
 // maps each original URL to a byte range in one of the split pack parts.
@@ -26,7 +22,7 @@ const NO_CACHE_BUST = new Set([
 // (browser HTTP cache + any Cache API entries) are abandoned and refetched.
 const CACHE_BUCKET_MS = 60 * 60 * 1000;
 // Bump when deployed files change so clients refetch even in the same hour bucket.
-const CACHE_EPOCH = "20261125c";
+const CACHE_EPOCH = "20261125d";
 function cacheBucket() { return Math.floor(Date.now() / CACHE_BUCKET_MS); }
 function cacheVersion() { return CACHE_EPOCH + "-" + cacheBucket(); }
 
@@ -160,7 +156,10 @@ async function findParts(url) {
   const urls = [];
   let total = 0;
   let known = true;
-  for (let i = 1; i <= MAX_PARTS; i++) {
+  let i = 1;
+  // No part-count cap: keep probing until a part is missing. The HTML check
+  // stops a SPA fallback from turning this into an endless loop.
+  while (true) {
     const partUrl = `${url.origin}${url.pathname}.part${String(i).padStart(3, "0")}?_v=${cacheVersion()}`;
     const head = await fetch(partUrl, { method: "HEAD" });
     if (!head.ok) break;
@@ -169,6 +168,7 @@ async function findParts(url) {
     if (len) total += len;
     else known = false;
     urls.push(partUrl);
+    i++;
   }
   return urls.length ? { urls, total: known ? total : 0 } : null;
 }
@@ -223,9 +223,7 @@ async function handle(req, url) {
     return withCOI(direct, url);
   }
 
-  // Only split assets have .partNNN siblings. Probing every missing file
-  // would add a wasted HEAD 404 per asset (favicons, shaders, fonts, ...).
-  if (!SPLIT_SUFFIXES.some((s) => url.pathname.endsWith(s))) return withCOI(direct, url);
+  // Any missing file may be a split asset; check for .partNNN siblings.
   const found = await findParts(url);
   if (!found) return withCOI(direct, url);
 

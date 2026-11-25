@@ -51,7 +51,7 @@
     </style>
   </head>
   <body>
-    <button id="fullscreen-btn" type="button" title="Enter Fullscreen (F)">Fullscreen</button>
+    <button id="fullscreen-btn" type="button" title="Toggle Fullscreen">Fullscreen</button>
     <canvas id="unity-canvas" width="1280" height="720"></canvas>
     <script src="Build/ULTRAWEB 1.7a.loader.js"></script>
     <script>
@@ -76,11 +76,6 @@
       }
 
       fsBtn.addEventListener("click", toggleFullscreen);
-      window.addEventListener("keydown", (e) => {
-        if (e.key === "f" || e.key === "F") {
-          toggleFullscreen();
-        }
-      });
 
       createUnityInstance(canvas, {
         dataUrl: "Build/ULTRAWEB 1.7a.data.unityweb",

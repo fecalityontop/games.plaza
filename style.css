@@ -101,8 +101,30 @@ header::after {
     filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.5));
     transition: filter .2s, color .2s;
 }
-#proxy {
-    margin-right: 10px;
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-right: 20px;
+}
+.social-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 50px;
+    color: var(--muted);
+    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.5));
+    transition: color .2s, filter .2s, transform .2s;
+}
+.social-icon svg {
+    width: 22px;
+    height: 22px;
+    fill: currentColor;
+}
+.social-icon:hover {
+    color: var(--accent);
+    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.5)) brightness(1.15);
+    transform: translateY(-1px);
 }
 #proxy:hover, #settings-tab:hover {
     filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.5)) brightness(1.1);

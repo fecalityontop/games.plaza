@@ -22,7 +22,7 @@ const NO_CACHE_BUST = new Set([
 // (browser HTTP cache + any Cache API entries) are abandoned and refetched.
 const CACHE_BUCKET_MS = 60 * 60 * 1000;
 // Bump when deployed files change so clients refetch even in the same hour bucket.
-const CACHE_EPOCH = "20261125d";
+const CACHE_EPOCH = "20261125f";
 function cacheBucket() { return Math.floor(Date.now() / CACHE_BUCKET_MS); }
 function cacheVersion() { return CACHE_EPOCH + "-" + cacheBucket(); }
 

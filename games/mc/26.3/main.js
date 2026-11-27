@@ -29,9 +29,9 @@ async function webgpu() {
 // reload, which skips the worker (it never takes over that page).
 async function cacheWorker() {
     // This build no longer ships its own service worker; the site's root
-    // service worker (registered below in index.html) handles isolation and
-    // part reassembly. Keep this a no-op so nothing tries to register a
-    // missing sw.js.
+    // service worker (registered automatically by worker.js) handles
+    // isolation and part reassembly. Keep this a no-op so nothing tries to
+    // register a missing sw.js.
     return;
     const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     let active = false;
